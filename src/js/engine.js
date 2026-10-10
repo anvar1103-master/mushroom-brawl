@@ -33,7 +33,8 @@ float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f
 float fbm(vec2 p){ float v = 0.0, a = 0.5; for(int i = 0; i < 5; i++){ v += a * noise(p); p = p * 2.03 + 1.7; a *= 0.5; } return v; }
 void main(){
   vec3 d = normalize(vDir); float h = d.y;
-  float side = clamp(dot(normalize(d.xz + 1e-4), normalize(sunDir.xz)) * 0.5 + 0.5, 0.0, 1.0);
+  vec2 dxz = d.xz; float dl = length(dxz); dxz = dl > 1e-3 ? dxz / dl : vec2(0.0, 1.0);
+  float side = clamp(dot(dxz, normalize(sunDir.xz)) * 0.5 + 0.5, 0.0, 1.0);
   vec3 horc = mix(hor2, hor, side * side);
   vec3 col = mix(horc, top, pow(clamp(h, 0.0, 1.0), 0.45));
   col = mix(col, horc * 0.8, clamp(-h / 0.3, 0.0, 1.0));
@@ -45,7 +46,8 @@ void main(){
     vec3 cc = mix(cloud * vec3(0.75, 0.68, 0.85), cloud, side) * (0.85 + 0.2 * fbm(uv * 2.0 + 3.0)) + disc * pow(s, 5.0) * 0.9;
     col = mix(col, cc, c * 0.9);
   }
-  gl_FragColor = vec4(clamp(col, 0.0, 8.0), 1.0);
+  col = clamp(col, 0.0, 8.0); if(!(col.r == col.r && col.g == col.g && col.b == col.b)) col = top;
+  gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }` });

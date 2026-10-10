@@ -148,8 +148,8 @@ function windify(mat, heightNorm, amt, push){
       wp.z += cos(uTime * 1.3 + ph * 1.2) * ${(amt * 0.6).toFixed(3)} * hw;
       ${push ? `for(int i = 0; i < 10; i++){
         vec2 d = wp.xz - uPush[i].xy; float l = length(d);
-        float k = (1.0 - smoothstep(0.0, uPush[i].z, l)) * step(0.01, uPush[i].z);
-        wp.xz += d / max(l, 0.001) * k * 0.55 * hw; wp.y -= k * 0.45 * hw * ${heightNorm.toFixed(3)};
+        float k = uPush[i].z > 0.01 ? 1.0 - smoothstep(0.0, uPush[i].z, l) : 0.0;
+        wp.xz += d / max(l, 0.01) * k * 0.55 * hw; wp.y -= k * 0.45 * hw * ${heightNorm.toFixed(3)};
       }` : ''}
       vWPg = wp.xyz;
       mvPosition = viewMatrix * wp;
@@ -179,7 +179,7 @@ function triplanar(mat, scale){
   mat.onBeforeCompile = sh => {
     sh.vertexShader = 'varying vec3 vWP; varying vec3 vWN;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n vWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vWN = normalize(mat3(modelMatrix) * objectNormal);');
     sh.fragmentShader = 'varying vec3 vWP; varying vec3 vWN;\n' + sh.fragmentShader.replace('#include <map_fragment>', `
-      vec3 bw = pow(abs(vWN), vec3(4.0)); bw /= (bw.x + bw.y + bw.z);
+      vec3 bw = pow(abs(vWN), vec3(4.0)); bw /= max(bw.x + bw.y + bw.z, 1e-4);
       vec4 tx = texture2D(map, vWP.zy * ${scale.toFixed(3)}), ty = texture2D(map, vWP.xz * ${scale.toFixed(3)}), tz = texture2D(map, vWP.xy * ${scale.toFixed(3)});
       diffuseColor *= tx * bw.x + ty * bw.y + tz * bw.z;`);
   };

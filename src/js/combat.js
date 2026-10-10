@@ -278,7 +278,7 @@ const puddleMat = new THREE.ShaderMaterial({ transparent:true, depthWrite:false,
     float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
     void main(){ vec2 p = vUv - 0.5; float d = length(p) * 2.0;
       float e = n(p * 7.0 + uTime * 0.7) * 0.25 + n(p * 15.0 - uTime) * 0.12;
-      float a = smoothstep(1.0, 0.82, d + e * 0.6);
+      float a = 1.0 - smoothstep(0.82, 1.0, d + e * 0.6);
       float bub = smoothstep(0.62, 0.8, n(p * 12.0 + vec2(uTime * 0.5, -uTime * 0.8)));
       vec3 col = mix(vec3(0.95, 0.35, 0.05), vec3(1.0, 0.8, 0.25), bub + (1.0 - d) * 0.4);
       gl_FragColor = vec4(col * 1.6, a * 0.78 * uK);

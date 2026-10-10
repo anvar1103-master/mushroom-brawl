@@ -94,10 +94,11 @@ function buildLightColumns(){
       void main(){ vC = color; vY = uv.y; vPh = aPh; vec4 wp = modelMatrix * vec4(position, 1.0); vN = normalize(mat3(modelMatrix) * normal); vV = normalize(cameraPosition - wp.xyz);
         gl_Position = projectionMatrix * viewMatrix * wp; }`,
     fragmentShader:`uniform float t; varying vec3 vC; varying float vY; varying float vPh; varying vec3 vN; varying vec3 vV;
-      void main(){ float edge = pow(1.0 - abs(dot(vN, vV)), 1.5);
+      void main(){ float edge = pow(clamp(1.0 - abs(dot(normalize(vN), normalize(vV))), 0.0, 1.0), 1.5);
         float pulse = 0.65 + 0.35 * sin(t * 0.8 + vPh) * sin(t * 1.7 + vPh * 2.0);
-        float a = pow(1.0 - vY, 1.6) * (0.35 + 0.65 * (1.0 - edge)) * 0.75 * pulse;
-        gl_FragColor = vec4(vC * a, a);
+        float a = pow(clamp(1.0 - vY, 0.0, 1.0), 1.6) * (0.35 + 0.65 * (1.0 - edge)) * 0.75 * pulse;
+        a = clamp(a, 0.0, 1.0);
+        gl_FragColor = vec4(clamp(vC * a, 0.0, 4.0), a);
         #include <colorspace_fragment>
       }` });
   const m = new THREE.Mesh(mergeGeometries(geos), mat); m.renderOrder = 4; m.frustumCulled = false;
