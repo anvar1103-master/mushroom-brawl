@@ -9,36 +9,40 @@ import { $, TOUCH, store, rand } from './util.js';
 export const canvas = $('c');
 export const renderer = new THREE.WebGLRenderer({ canvas, antialias:!TOUCH, powerPreference:'high-performance', stencil:false });
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
 // soft shadows cost several texture reads per pixel: phones get the plain filter
 renderer.shadowMap.type = store.get('q', TOUCH ? 'low' : 'high') === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 
 export const scene = new THREE.Scene();
-export const FOG_COL = new THREE.Color('#BFE3D2');
+export const FOG_COL = new THREE.Color('#B9A08A');   // warm evening haze
 scene.fog = new THREE.Fog(FOG_COL, 48, 120);
 export const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
 
 // ---- sky: gradient, sun glow and drifting clouds (from «Лесная война») ----
-export const SUN_DIR = new THREE.Vector3(-0.42, 0.78, 0.46).normalize();
-const skyU = { top:{ value:new THREE.Color('#3E9BEA') }, hor:{ value:new THREE.Color('#CFF0E6') }, sunDir:{ value:SUN_DIR }, t:{ value:0 }, disc:{ value:new THREE.Color('#FFE2A8') }, cloud:{ value:new THREE.Color('#FFFFFF') } };
+// late afternoon: a low sun off to one side (neither team stares into it), golden horizon on the sun's side,
+// dusky violet on the far side
+export const SUN_DIR = new THREE.Vector3(-0.86, 0.3, 0.22).normalize();
+const skyU = { top:{ value:new THREE.Color('#27477E') }, hor:{ value:new THREE.Color('#FFB46A') }, hor2:{ value:new THREE.Color('#9C7FB0') }, sunDir:{ value:SUN_DIR }, t:{ value:0 }, disc:{ value:new THREE.Color('#FFA040') }, cloud:{ value:new THREE.Color('#F6C6A4') } };
 const skyMat = new THREE.ShaderMaterial({ side:THREE.BackSide, depthWrite:false, fog:false, uniforms:skyU,
   vertexShader:'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader:`uniform vec3 top; uniform vec3 hor; uniform vec3 sunDir; uniform float t; uniform vec3 disc; uniform vec3 cloud; varying vec3 vDir;
+  fragmentShader:`uniform vec3 top; uniform vec3 hor; uniform vec3 hor2; uniform vec3 sunDir; uniform float t; uniform vec3 disc; uniform vec3 cloud; varying vec3 vDir;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }
 float fbm(vec2 p){ float v = 0.0, a = 0.5; for(int i = 0; i < 5; i++){ v += a * noise(p); p = p * 2.03 + 1.7; a *= 0.5; } return v; }
 void main(){
   vec3 d = normalize(vDir); float h = d.y;
-  vec3 col = mix(hor, top, pow(clamp(h, 0.0, 1.0), 0.55));
-  col = mix(col, hor * 0.92, clamp(-h / 0.3, 0.0, 1.0));
+  float side = clamp(dot(normalize(d.xz + 1e-4), normalize(sunDir.xz)) * 0.5 + 0.5, 0.0, 1.0);
+  vec3 horc = mix(hor2, hor, side * side);
+  vec3 col = mix(horc, top, pow(clamp(h, 0.0, 1.0), 0.45));
+  col = mix(col, horc * 0.8, clamp(-h / 0.3, 0.0, 1.0));
   float s = max(dot(d, sunDir), 0.0);
-  col += disc * (pow(s, 900.0) * 14.0 + pow(s, 30.0) * 0.35 + pow(s, 4.0) * 0.08);
+  col += disc * (pow(s, 1200.0) * 10.0 + pow(s, 40.0) * 0.55 + pow(s, 6.0) * 0.18);
   if(h > 0.0){
     vec2 uv = d.xz / (h + 0.16) * 1.3 + vec2(t * 0.012, t * 0.005);
     float c = smoothstep(0.48, 0.78, fbm(uv)) * smoothstep(0.0, 0.25, h);
-    vec3 cc = cloud * (0.92 + 0.16 * fbm(uv * 2.0 + 3.0)) + disc * pow(s, 6.0) * 0.6;
+    vec3 cc = mix(cloud * vec3(0.75, 0.68, 0.85), cloud, side) * (0.85 + 0.2 * fbm(uv * 2.0 + 3.0)) + disc * pow(s, 5.0) * 0.9;
     col = mix(col, cc, c * 0.9);
   }
   gl_FragColor = vec4(clamp(col, 0.0, 8.0), 1.0);
@@ -53,14 +57,14 @@ export function skyTick(dt){ skyU.t.value += dt; }
 export function buildEnv(){
   const pm = new THREE.PMREMGenerator(renderer), es = new THREE.Scene();
   es.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), skyMat));
-  const gnd = new THREE.Mesh(new THREE.CircleGeometry(49, 24), new THREE.MeshBasicMaterial({ color:'#5F8A3A', side:THREE.DoubleSide }));
+  const gnd = new THREE.Mesh(new THREE.CircleGeometry(49, 24), new THREE.MeshBasicMaterial({ color:'#4A6A2E', side:THREE.DoubleSide }));
   gnd.rotation.x = -Math.PI / 2; gnd.position.y = -4; es.add(gnd);
   const rt = pm.fromScene(es, 0.04, 0.1, 200); pm.dispose();
   scene.environment = rt.texture;
 }
 
-export const hemi = new THREE.HemisphereLight('#E4F6FF', '#5E7A3A', 0.75); scene.add(hemi);
-export const sun = new THREE.DirectionalLight('#FFF1D6', 2.6);
+export const hemi = new THREE.HemisphereLight('#AFC2EC', '#4E5E2C', 0.8); scene.add(hemi);
+export const sun = new THREE.DirectionalLight('#FFC88C', 2.5);
 sun.castShadow = true;
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
 scene.add(sun, sun.target);
