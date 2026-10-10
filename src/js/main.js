@@ -11,6 +11,7 @@ import { makeFighter, removeFighters, spawn, stepFighter, updateShots, updateLob
 import { makeVisual, animate, setTeamLook, kick } from './anim.js';
 import { newBot, botThink } from './bots.js';
 import { buildMine, startSpores, updateSpores, clearSpores } from './mode.js';
+import { buildBackdrop, updateBackdrop } from './backdrop.js';
 import { playerInput, updateCamera, updateGuide, CAM, releaseLock, lockHint } from './player.js';
 import { makeTag, updateTags, updateHud, feed, announce, tickAnnounce, renderHeroes, showEnd } from './hud.js';
 import { updateFx, clearFx } from './fx.js';
@@ -28,6 +29,7 @@ setLoad(0.92);
 buildEnv();
 buildArena('glade');
 buildMine();
+buildBackdrop();
 applyQuality();
 addEventListener('resize', resize);
 $('load').hidden = true;
@@ -171,6 +173,7 @@ function tick(dt){
     if(G.state === 'end'){ endT += dt; if(endT > 2.6 && $('end').hidden){ showEnd(G.result); $('hud').hidden = true; } }
   }
   updateFighterVisuals(dt, G.time);
+  updateBackdrop(dt, G.time);
   // grass bends away from everyone walking through it
   let n = 0;
   for(const f of G.fighters) if(f.alive && n < U.push.value.length) U.push.value[n++].set(f.x, f.z, PUSH_R);
