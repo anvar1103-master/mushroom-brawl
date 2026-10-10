@@ -51,6 +51,10 @@ fs.writeFileSync(path.join(ART, 'assets/nature-glb.txt'), fs.readFileSync(path.j
 fs.rmSync(path.join(ART, 'assets/nature.glb'));
 fs.writeFileSync(path.join(ART, 'index.html'), page);
 
+// ---- GitHub Pages copy (Settings → Pages → main, /docs): the plain web build ----
+const DOCS = path.join(ROOT, 'docs');
+rm(DOCS); copy(OUT, DOCS); fs.writeFileSync(path.join(DOCS, '.nojekyll'), '');
+
 const kb = p => Math.round(fs.statSync(p).size / 1024);
 console.log('game.js', kb(path.join(OUT, 'js/game.js')), 'KB; web total', Math.round(walk(OUT).reduce((a, f) => a + fs.statSync(f).size, 0) / 1024), 'KB');
 if(!process.argv.includes('--no-zip')){
