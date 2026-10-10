@@ -1,6 +1,6 @@
 // Visual effects: one instanced particle system per blend mode, shockwave rings, scorch marks, damage numbers.
 import * as THREE from 'three';
-import { scene, camera } from './engine.js';
+import { scene, camera, LOW } from './engine.js';
 import { rand, TAU, $ } from './util.js';
 import { G } from './state.js';
 
@@ -58,13 +58,14 @@ export const smoke = new Particles(500, false);
 const C = new THREE.Color();
 export function puff(sys, x, y, z, o){
   C.set(o.color || '#fff');
-  const n = o.n || 1;
+  const n = LOW ? Math.ceil((o.n || 1) * 0.6) : o.n || 1;   // phones: fewer, smaller puffs (less overdraw)
+  const sk = LOW ? 0.85 : 1;
   for(let i = 0; i < n; i++){
     const a = rand(0, TAU), up = rand(o.upMin ?? -0.3, o.upMax ?? 1), sp = rand(o.spMin ?? 0, o.sp ?? 2);
     const cj = o.jitter ? rand(1 - o.jitter, 1 + o.jitter) : 1;
     sys.emit({ x:x + rand(-1, 1) * (o.spread || 0), y:y + rand(-1, 1) * (o.spreadY ?? o.spread ?? 0), z:z + rand(-1, 1) * (o.spread || 0),
       vx:Math.cos(a) * sp * Math.sqrt(1 - up * up * 0.5) + (o.vx || 0), vy:up * sp + (o.vy || 0), vz:Math.sin(a) * sp * Math.sqrt(1 - up * up * 0.5) + (o.vz || 0),
-      life:rand(o.life * 0.7, o.life * 1.3), t:0, s0:o.s0 * rand(0.8, 1.2), s1:(o.s1 ?? o.s0) * rand(0.8, 1.2), r:C.r * cj, g:C.g * cj, b:C.b * cj, a:o.a ?? 1,
+      life:rand(o.life * 0.7, o.life * 1.3), t:0, s0:o.s0 * sk * rand(0.8, 1.2), s1:(o.s1 ?? o.s0) * sk * rand(0.8, 1.2), r:C.r * cj, g:C.g * cj, b:C.b * cj, a:o.a ?? 1,
       grav:o.grav || 0, drag:o.drag ?? 2, soft:o.soft ? 1 : 0 });
   }
 }

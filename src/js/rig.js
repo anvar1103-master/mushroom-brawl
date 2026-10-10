@@ -2,6 +2,7 @@
 // single SkinnedMesh with vertex colours, so a hero costs one draw call (+ outline + silhouette) whatever its detail.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { stdMat } from './engine.js';
 
 const G = {
   sph:new THREE.SphereGeometry(1, 14, 10), sphLo:new THREE.SphereGeometry(1, 7, 5),
@@ -89,7 +90,7 @@ export class Rig {
 
 // ---- hero materials: vertex colours, soft rim light, glow channel, white hit flash ----
 export function heroMaterial(){
-  const m = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.5, metalness:0.0 });
+  const m = stdMat({ vertexColors:true, roughness:0.5, metalness:0.0 });
   m.userData.u = { uFlash:{ value:0 }, uRim:{ value:new THREE.Color('#FFF6DA') }, uTint:{ value:new THREE.Color(0, 0, 0) } };
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, m.userData.u);

@@ -7,10 +7,20 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { $, TOUCH, store, rand } from './util.js';
 
 export const canvas = $('c');
+// «Быстрая» graphics (the default on phones) is fixed for the session: cheaper materials, no shadow maps,
+// a sky baked once instead of drawn every frame. Switching quality reloads the page.
+export const LOW = store.get('q', TOUCH ? 'low' : 'high') !== 'high';
+const LAMBERT_DROP = ['roughness', 'metalness', 'envMapIntensity', 'roughnessMap', 'metalnessMap'];
+// standard (PBR) material on «Красивая», a much cheaper Lambert one on «Быстрая»
+export function stdMat(o = {}){
+  if(!LOW) return new THREE.MeshStandardMaterial(o);
+  const l = Object.assign({}, o); for(const k of LAMBERT_DROP) delete l[k];
+  return new THREE.MeshLambertMaterial(l);
+}
 export const renderer = new THREE.WebGLRenderer({ canvas, antialias:!TOUCH, powerPreference:'high-performance', stencil:false });
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = !LOW;
 // soft shadows cost several texture reads per pixel: phones get the plain filter
 renderer.shadowMap.type = store.get('q', TOUCH ? 'low' : 'high') === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 
@@ -65,8 +75,21 @@ export function buildEnv(){
   scene.environment = rt.texture;
 }
 
+// «Быстрая»: render the sky (with its clouds) into a cube texture once and use it as a plain background
+export function bakeSky(){
+  if(!LOW) return;
+  const rt = new THREE.WebGLCubeRenderTarget(256, { type:THREE.HalfFloatType });
+  const cc = new THREE.CubeCamera(0.5, 400, rt), es = new THREE.Scene();
+  const m = new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), skyMat); es.add(m);
+  cc.update(renderer, es);
+  scene.background = rt.texture;
+  sky.visible = false;
+}
+
 export const hemi = new THREE.HemisphereLight('#AFC2EC', '#4E5E2C', 0.8); scene.add(hemi);
 export const sun = new THREE.DirectionalLight('#FFC88C', 2.5);
+// Lambert materials get no light from the sky image: a stronger sky light makes up for it
+if(LOW){ hemi.intensity = 1.55; sun.intensity = 2.3; }
 sun.castShadow = true;
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
 scene.add(sun, sun.target);
@@ -90,7 +113,8 @@ export function canvasTex(w, h, draw, opt = {}){
 
 // ---- quality: «high» gets bloom and full resolution; the frame watcher trims resolution when frames run long ----
 export const Q = { level:store.get('q', TOUCH ? 'low' : 'high'), PR:1, post:false, composer:null, bloom:null, perfN:0, perfSum:0, calm:0 };
-export function maxPR(){ return Math.min(Q.level === 'high' ? 2 : 1.2, devicePixelRatio || 1); }
+export function maxPR(){ return Math.min(Q.level === 'high' ? 2 : 1.6, devicePixelRatio || 1); }
+const minPR = () => Math.min(Q.level === 'high' ? 0.7 : 0.9, devicePixelRatio || 1);
 export function resize(){
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false);
@@ -112,7 +136,7 @@ function initPost(){
 export function applyQuality(level){
   if(level){ Q.level = level; store.set('q', level); }
   const hi = Q.level === 'high';
-  Q.PR = Math.min(maxPR(), hi ? 2 : 1); renderer.setPixelRatio(Q.PR);
+  Q.PR = Math.min(maxPR(), hi ? 2 : 1.3); renderer.setPixelRatio(Q.PR);
   scene.fog.near = hi ? 48 : 30; scene.fog.far = hi ? 120 : 80; camera.far = hi ? 400 : 160; camera.updateProjectionMatrix();
   sky.scale.setScalar(hi ? 1 : 0.45);   // the sky dome must stay inside the far plane
   const sz = hi ? 2048 : 1024;
@@ -131,7 +155,7 @@ export function perfWatch(raw, active){
   if(avg > 0.0195){
     Q.calm = 0;
     if(Q.post){ Q.post = false; Q.noPost = true; }
-    else if(Q.PR > 0.65){ Q.PR = Math.max(0.65, Q.PR * 0.85); renderer.setPixelRatio(Q.PR); resize(); }
+    else if(Q.PR > minPR()){ Q.PR = Math.max(minPR(), Q.PR * 0.88); renderer.setPixelRatio(Q.PR); resize(); }
   } else if(avg < 0.0125 && ++Q.calm >= 3){
     Q.calm = 0;
     if(Q.PR < maxPR()){ Q.PR = Math.min(maxPR(), Q.PR * 1.12); renderer.setPixelRatio(Q.PR); resize(); }

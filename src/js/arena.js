@@ -1,7 +1,7 @@
 // The arena: tile grid, collisions, line of sight, path finding and the 3D dressing around it.
 import * as THREE from 'three';
 import { mergeVertices, mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { scene, canvasTex, fitShadow } from './engine.js';
+import { scene, canvasTex, fitShadow, stdMat, LOW } from './engine.js';
 import { NATURE } from './assets.js';
 import { TILE, MAPS } from './maps.js';
 import { rand, pick, seeded, clamp, TAU, TOUCH } from './util.js';
@@ -179,9 +179,11 @@ function triplanar(mat, scale){
   mat.onBeforeCompile = sh => {
     sh.vertexShader = 'varying vec3 vWP; varying vec3 vWN;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n vWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vWN = normalize(mat3(modelMatrix) * objectNormal);');
     sh.fragmentShader = 'varying vec3 vWP; varying vec3 vWN;\n' + sh.fragmentShader.replace('#include <map_fragment>', `
-      vec3 bw = pow(abs(vWN), vec3(4.0)); bw /= max(bw.x + bw.y + bw.z, 1e-4);
+      ${LOW ? `vec3 an = abs(vWN);   // phones: one texture read along the main axis instead of three
+      vec2 tuv = an.y > an.x && an.y > an.z ? vWP.xz : an.x > an.z ? vWP.zy : vWP.xy;
+      diffuseColor *= texture2D(map, tuv * ${scale.toFixed(3)});` : `vec3 bw = pow(abs(vWN), vec3(4.0)); bw /= max(bw.x + bw.y + bw.z, 1e-4);
       vec4 tx = texture2D(map, vWP.zy * ${scale.toFixed(3)}), ty = texture2D(map, vWP.xz * ${scale.toFixed(3)}), tz = texture2D(map, vWP.xy * ${scale.toFixed(3)});
-      diffuseColor *= tx * bw.x + ty * bw.y + tz * bw.z;`);
+      diffuseColor *= tx * bw.x + ty * bw.y + tz * bw.z;`}`);
   };
   mat.customProgramCacheKey = () => 'tri' + scale;
   return mat;
@@ -311,7 +313,7 @@ function buildGround(){
     p.setY(i, -d * 0.7);
   }
   geo.computeVertexNormals();
-  const floor = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map:tex, roughness:0.95 }));
+  const floor = new THREE.Mesh(geo, stdMat({ map:tex, roughness:0.95 }));
   floor.receiveShadow = true; A.group.add(floor);
   // the ground outside the fence: a big tiling grass texture that fades into fog
   const outTex = canvasTex(256, 256, (g, w, h) => {
@@ -319,12 +321,12 @@ function buildGround(){
     for(let i = 0; i < 1400; i++){ const x = rand(0, w), y = rand(0, h); g.strokeStyle = pick(['rgba(40,100,30,.5)', 'rgba(120,190,70,.45)', 'rgba(70,130,40,.5)']); g.lineWidth = rand(1, 2); g.beginPath(); g.moveTo(x, y); g.lineTo(x + rand(-2, 2), y - rand(3, 8)); g.stroke(); }
   }, { repeat:true });
   outTex.repeat.set(40, 40);
-  const outer = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), new THREE.MeshStandardMaterial({ map:outTex, roughness:1 }));
+  const outer = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), stdMat({ map:outTex, roughness:1 }));
   outer.rotation.x = -Math.PI / 2; outer.position.y = -0.02; outer.receiveShadow = true; A.group.add(outer);
 }
 
 function hedgeMat(){
-  if(!A.shared.hedge){ A.shared.hedge = triplanar(new THREE.MeshStandardMaterial({ map:leafTex(), vertexColors:true, roughness:0.85, color:'#E8FFD8' }), 0.55); }
+  if(!A.shared.hedge){ A.shared.hedge = triplanar(stdMat({ map:leafTex(), vertexColors:true, roughness:0.85, color:'#E8FFD8' }), 0.55); }
   return A.shared.hedge;
 }
 export const HEDGE_H = 2.6;
@@ -366,7 +368,7 @@ function leafMat(color){
   const key = 'leaf' + color;
   if(!A.shared[key]){
     const map = NATURE.Bush_Common.parts[0].map;
-    A.shared[key] = windify(new THREE.MeshStandardMaterial({ map, color, alphaTest:0.45, side:THREE.DoubleSide, roughness:0.8 }), 1.6, 0.05, false);
+    A.shared[key] = windify(stdMat({ map, color, alphaTest:0.45, side:THREE.DoubleSide, roughness:0.8 }), 1.6, 0.05, false);
   }
   return A.shared[key];
 }
@@ -378,7 +380,7 @@ function buildCover(){
     if(ch === 'R'){ const k = (r * 7 + c * 3) % 3; rocks[k].push({ x, z, y:-0.05, rot:rand(0, TAU), s:0.56 }); }
     if(ch === 'T') stumps.push({ x, z, rot:rand(0, TAU), s:rand(0.95, 1.05) });
   }
-  const rockMat = new THREE.MeshStandardMaterial({ map:NATURE.Rock_Medium_1.parts[0].map, roughness:0.9, color:'#D8E0D0' });
+  const rockMat = stdMat({ map:NATURE.Rock_Medium_1.parts[0].map, roughness:0.9, color:'#D8E0D0' });
   rocks.forEach((list, i) => instanceModel('Rock_Medium_' + (i + 1), list, () => rockMat, { cast:true }));
   // stumps: lathe with bark, rings on top
   const { side, top } = stumpGeo();
@@ -397,7 +399,7 @@ function buildCover(){
     stumps.forEach((t, i) => { tmpQ.setFromAxisAngle(UP, t.rot); tmpM.compose(tmpP.set(t.x, 0, t.z), tmpQ, tmpS.setScalar(t.s)); im.setMatrixAt(i, tmpM); });
     im.castShadow = im.receiveShadow = true; A.group.add(im);
   };
-  if(stumps.length){ mk(side, new THREE.MeshStandardMaterial({ map:bark, roughness:0.9 })); mk(top, new THREE.MeshStandardMaterial({ map:rings, roughness:0.8 })); }
+  if(stumps.length){ mk(side, stdMat({ map:bark, roughness:0.9 })); mk(top, stdMat({ map:rings, roughness:0.8 })); }
 }
 
 export let grassMeshes = [];
@@ -433,7 +435,7 @@ function grassPatchGeo(n){
 function buildGrass(){
   const n = Q.level === 'high' ? 70 : 46;
   const geos = [grassPatchGeo(n), grassPatchGeo(n), grassPatchGeo(n)];
-  const mat = windify(new THREE.MeshStandardMaterial({ vertexColors:true, roughness:1, side:THREE.DoubleSide, envMapIntensity:0.5 }), 1.6, 0.12, true);
+  const mat = windify(stdMat({ vertexColors:true, roughness:1, side:THREE.DoubleSide, envMapIntensity:0.5 }), 1.6, 0.12, true);
   grassMeshes = [];
   geos.forEach((geo, k) => {
     const tiles = A.grassTiles.filter((t, i) => i % 3 === k);
@@ -449,7 +451,7 @@ function buildWater(){
   for(let r = 0; r < A.H; r++) for(let c = 0; c < A.W; c++) if(A.rows[r][c] === '~') list.push([c, r]);
   if(!list.length) return;
   const geos = list.map(([c, r]) => { const g = new THREE.PlaneGeometry(TILE + 0.5, TILE + 0.5); g.rotateX(-Math.PI / 2); g.translate(tileX(c), -0.16, tileZ(r)); return g; });
-  const mat = new THREE.MeshStandardMaterial({ color:'#4FB5C8', roughness:0.12, metalness:0.1, transparent:true, opacity:0.82 });
+  const mat = stdMat({ color:'#4FB5C8', roughness:0.12, metalness:0.1, transparent:true, opacity:0.82 });
   mat.onBeforeCompile = sh => {
     sh.uniforms.uTime = U.time;
     sh.vertexShader = 'varying vec3 vWP2;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n vWP2 = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -472,17 +474,17 @@ function buildDecor(){
     if(ch === '.' && rand() < 0.06) pebbles.push({ x:x + rand(-0.6, 0.6), z:z + rand(-0.6, 0.6), rot:rand(0, TAU), s:rand(0.4, 0.7) });
     if(ch === '.' && rand() < 0.05) clover.push({ x:x + rand(-0.6, 0.6), z:z + rand(-0.6, 0.6), rot:rand(0, TAU), s:rand(0.35, 0.5) });
   }
-  const gm = windify(new THREE.MeshStandardMaterial({ map:NATURE.Grass_Common_Short.parts[0].map, roughness:0.9, side:THREE.DoubleSide, color:'#A8E07A' }), 1.3, 0.06, true);
+  const gm = windify(stdMat({ map:NATURE.Grass_Common_Short.parts[0].map, roughness:0.9, side:THREE.DoubleSide, color:'#A8E07A' }), 1.3, 0.06, true);
   instanceModel('Grass_Common_Short', shortGrass, () => gm);
   instanceModel('Flower_3_Group', flowers, p => p.matName === 'Flowers' ? flowerMat() : leafMat2('#5DB043'));
-  const pm = new THREE.MeshStandardMaterial({ map:NATURE.Pebble_Round_1.parts[0].map, roughness:0.9 });
+  const pm = stdMat({ map:NATURE.Pebble_Round_1.parts[0].map, roughness:0.9 });
   instanceModel('Pebble_Round_1', pebbles, () => pm);
   instanceModel('Clover_1', clover, () => leafMat2('#5AAE42'));
 }
-function flowerMat(){ return A.shared.fl || (A.shared.fl = windify(new THREE.MeshStandardMaterial({ map:NATURE.Flower_3_Group.parts.find(p => p.matName === 'Flowers').map, alphaTest:0.4, side:THREE.DoubleSide, roughness:0.7 }), 2, 0.05, true)); }
+function flowerMat(){ return A.shared.fl || (A.shared.fl = windify(stdMat({ map:NATURE.Flower_3_Group.parts.find(p => p.matName === 'Flowers').map, alphaTest:0.4, side:THREE.DoubleSide, roughness:0.7 }), 2, 0.05, true)); }
 function leafMat2(color){
   const key = 'leaves' + color;
-  if(!A.shared[key]){ const part = NATURE.Fern_1.parts[0]; A.shared[key] = windify(new THREE.MeshStandardMaterial({ map:part.map, color, alphaTest:0.4, side:THREE.DoubleSide, roughness:0.8 }), 2, 0.05, true); }
+  if(!A.shared[key]){ const part = NATURE.Fern_1.parts[0]; A.shared[key] = windify(stdMat({ map:part.map, color, alphaTest:0.4, side:THREE.DoubleSide, roughness:0.8 }), 2, 0.05, true); }
   return A.shared[key];
 }
 
@@ -506,13 +508,13 @@ function buildOutside(){
     else if(r < 0.78) mush.push({ x, z, rot:rand(0, TAU), s:rand(0.9, 1.6) });
     else flowers.push({ x, z, rot:rand(0, TAU), s:rand(0.5, 0.7) });
   }
-  const bark = new THREE.MeshStandardMaterial({ map:NATURE.CommonTree_3.parts.find(p => /Bark/.test(p.matName)).map, roughness:0.9 });
-  const leaves = name => windify(new THREE.MeshStandardMaterial({ map:NATURE[name].parts.find(p => /Lea/.test(p.matName)).map, alphaTest:0.45, side:THREE.DoubleSide, roughness:0.8, color:'#FFFFFF' }), 8, 0.12, false);
+  const bark = stdMat({ map:NATURE.CommonTree_3.parts.find(p => /Bark/.test(p.matName)).map, roughness:0.9 });
+  const leaves = name => windify(stdMat({ map:NATURE[name].parts.find(p => /Lea/.test(p.matName)).map, alphaTest:0.45, side:THREE.DoubleSide, roughness:0.8, color:'#FFFFFF' }), 8, 0.12, false);
   const shadows = false;
   for(const k in trees){ const lm = leaves(k); instanceModel(k, trees[k], p => /Bark/.test(p.matName) ? bark : lm, { cast:shadows }); }
-  instanceModel('Bush_Common', bushes, () => windify(new THREE.MeshStandardMaterial({ map:NATURE.Bush_Common.parts[0].map, alphaTest:0.45, side:THREE.DoubleSide, roughness:0.8 }), 1.6, 0.05, false));
+  instanceModel('Bush_Common', bushes, () => windify(stdMat({ map:NATURE.Bush_Common.parts[0].map, alphaTest:0.45, side:THREE.DoubleSide, roughness:0.8 }), 1.6, 0.05, false));
   instanceModel('Fern_1', ferns, () => leafMat2('#4E9E38'));
-  const mm = new THREE.MeshStandardMaterial({ map:NATURE.Mushroom_Common.parts[0].map, roughness:0.7 });
+  const mm = stdMat({ map:NATURE.Mushroom_Common.parts[0].map, roughness:0.7 });
   instanceModel('Mushroom_Common', mush, () => mm);
   instanceModel('Flower_3_Group', flowers, p => p.matName === 'Flowers' ? flowerMat() : leafMat2('#5DB043'));
 }

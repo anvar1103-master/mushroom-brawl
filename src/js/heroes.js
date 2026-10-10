@@ -1,6 +1,7 @@
 // Heroes: stats, attacks, supers and their rigged models.
 import * as THREE from 'three';
 import { Rig } from './rig.js';
+import { stdMat } from './engine.js';
 import { TAU } from './util.js';
 
 // Numbers are in metres, seconds and hit points.
@@ -165,7 +166,7 @@ export function buildHero(id){
 
 // glassy wings for the wasp: plain meshes that ride on the wing bones
 export function addWings(rig){
-  const wm = new THREE.MeshStandardMaterial({ color:'#E6F6FF', transparent:true, opacity:0.5, side:THREE.DoubleSide, roughness:0.1, depthWrite:false, emissive:'#9FD8FF', emissiveIntensity:0.15 });
+  const wm = stdMat({ color:'#E6F6FF', transparent:true, opacity:0.5, side:THREE.DoubleSide, roughness:0.1, depthWrite:false, emissive:'#9FD8FF', emissiveIntensity:0.15 });
   const wg = new THREE.PlaneGeometry(0.62, 0.24); wg.translate(0.31, 0, 0); wg.rotateX(-Math.PI / 2);
   const out = [];
   for(const [s, bn] of [[1, 'wingL'], [-1, 'wingR']]) for(let k = 0; k < 2; k++){

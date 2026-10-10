@@ -1,7 +1,7 @@
 // «Споры» (3 vs 3): the mycelium in the middle releases glowing spores. Carry 10 and hold them for 15 seconds to win.
 // A fighter who falls drops every spore they carried.
 import * as THREE from 'three';
-import { scene } from './engine.js';
+import { scene, stdMat } from './engine.js';
 import { G, emit, on } from './state.js';
 import { A } from './arena.js';
 import { glow, puff, ring } from './fx.js';
@@ -14,7 +14,7 @@ export const SPORES = { goal:10, hold:15, interval:5, first:4, dur:180 };
 // ---------------- the mycelium (mine) ----------------
 let mine = null;
 const sporeGeo = new THREE.IcosahedronGeometry(0.2, 0);
-const sporeMat = new THREE.MeshStandardMaterial({ color:'#B583FF', emissive:'#8A4DFF', emissiveIntensity:1.6, roughness:0.2, flatShading:true });
+const sporeMat = stdMat({ color:'#B583FF', emissive:'#8A4DFF', emissiveIntensity:1.6, roughness:0.2, flatShading:true });
 const coreMat = new THREE.MeshBasicMaterial({ color:new THREE.Color('#E9D8FF').multiplyScalar(2), toneMapped:false });
 const shadowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); const gr = g.createRadialGradient(32, 32, 2, 32, 32, 30); gr.addColorStop(0, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
 const shadowGeo = new THREE.PlaneGeometry(0.7, 0.7); shadowGeo.rotateX(-Math.PI / 2);
@@ -24,9 +24,9 @@ export function buildMine(){
   if(mine) scene.remove(mine.g);
   const g = new THREE.Group(); g.position.set(A.mine.x, 0, A.mine.z);
   // mossy mound with a glowing hollow
-  const mound = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.35, 0.32, 24), new THREE.MeshStandardMaterial({ color:'#6E5A3E', roughness:0.95 }));
+  const mound = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.35, 0.32, 24), stdMat({ color:'#6E5A3E', roughness:0.95 }));
   mound.position.y = 0.12; mound.receiveShadow = mound.castShadow = true; g.add(mound);
-  const moss = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.16, 8, 28), new THREE.MeshStandardMaterial({ color:'#5E9E3A', roughness:0.9 }));
+  const moss = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.16, 8, 28), stdMat({ color:'#5E9E3A', roughness:0.9 }));
   moss.rotation.x = Math.PI / 2; moss.position.y = 0.27; g.add(moss);
   // the glowing hollow: a swirl of violet light painted on a canvas, slowly turning
   const c = document.createElement('canvas'); c.width = c.height = 256; const gx = c.getContext('2d');
@@ -38,8 +38,8 @@ export function buildMine(){
   const holeMat = new THREE.MeshBasicMaterial({ map:holeTex, color:'#FFFFFF' });
   const hole = new THREE.Mesh(new THREE.CircleGeometry(0.78, 32), holeMat); hole.rotation.x = -Math.PI / 2; hole.position.y = 0.29; g.add(hole);
   // a ring of small glowing mushrooms
-  const stemM = new THREE.MeshStandardMaterial({ color:'#F1E6FF', roughness:0.6 });
-  const capM = new THREE.MeshStandardMaterial({ color:'#B07BFF', emissive:'#7A3DFF', emissiveIntensity:0.9, roughness:0.4 });
+  const stemM = stdMat({ color:'#F1E6FF', roughness:0.6 });
+  const capM = stdMat({ color:'#B07BFF', emissive:'#7A3DFF', emissiveIntensity:0.9, roughness:0.4 });
   const stemG = new THREE.CylinderGeometry(0.05, 0.07, 1, 8), capG = new THREE.SphereGeometry(1, 14, 8, 0, TAU, 0, Math.PI / 2);
   const caps = [];
   for(let i = 0; i < 9; i++){

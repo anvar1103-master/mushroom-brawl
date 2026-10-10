@@ -1,7 +1,7 @@
 // Boot, match flow and the main loop.
 import * as THREE from 'three';
 import { $, TOUCH, store, shuffle, esc } from './util.js';
-import { renderer, scene, camera, resize, applyQuality, render, perfWatch, skyTick, buildEnv, sky, Q } from './engine.js';
+import { renderer, scene, camera, resize, applyQuality, render, perfWatch, skyTick, buildEnv, bakeSky, sky, Q } from './engine.js';
 import { loadNature } from './assets.js';
 import { buildArena, U, A, segHit } from './arena.js';
 import { applyLang, tr, L } from './i18n.js';
@@ -27,6 +27,7 @@ const setLoad = k => { $('load-bar').style.width = Math.round(k * 100) + '%'; };
 await Promise.all([loadNature(k => setLoad(k * 0.85)), preloadSfx()]);
 setLoad(0.92);
 buildEnv();
+bakeSky();
 buildArena('glade');
 buildMine();
 buildBackdrop();
@@ -50,7 +51,7 @@ function renderMenu(){
   $('howto').textContent = tr(TOUCH ? 'Левый палец — бег, правый — поворот камеры. Кнопка атаки: короткое нажатие — автоприцел, с протяжкой — целишься сам. Звезда — супер.' : 'WASD — бег, мышь — камера и прицел, ЛКМ — атака, ПКМ или E — супер, Esc — пауза.');
 }
 $('m-diff').onclick = e => { const v = e.target.dataset.v; if(!v) return; MENU.diff = v; store.set('diff', v); sfx('click'); renderMenu(); };
-$('m-q').onclick = e => { const v = e.target.dataset.v; if(!v) return; applyQuality(v); sfx('click'); renderMenu(); };
+$('m-q').onclick = e => { const v = e.target.dataset.v; if(!v || v === Q.level) return; applyQuality(v); sfx('click'); setTimeout(() => location.reload(), 120); };
 $('m-snd').onclick = e => { const v = e.target.dataset.v; if(!v) return; unlockAudio(); if(v === 'sfx') setSfx(!AU.sfxOn); else setMusic(!AU.musicOn); sfx('click'); renderMenu(); };
 $('play').onclick = () => { unlockAudio(); sfx('confirm'); startMatch(); };
 function showMenu(){
@@ -228,6 +229,8 @@ window.__bg = {
   fighters:() => G.fighters, G, A, CAM, menu:MENU, showMenu, cam(a){ G.dbgCam = a; },
   info:() => ({ calls:renderer.info.render.calls, tris:renderer.info.render.triangles, geos:renderer.info.memory.geometries, tex:renderer.info.memory.textures, progs:renderer.info.programs.length, PR:Q.PR, post:Q.post }),
   post(v){ Q.post = !!v && !!Q.composer; Q.noPost = !v; },
-  pause:setPause, tr, L, tick, dmg:damage
+  pause:setPause, tr, L, tick, dmg:damage,
+  // frame-time benchmark for tools: n frames of game update + render, waiting for the GPU each frame
+  bench(n = 60, pr){ if(pr){ renderer.setPixelRatio(pr); resize(); } const gl = renderer.getContext(), t0 = performance.now(); const px = new Uint8Array(4); for(let i = 0; i < n; i++){ tick(1 / 60); render(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return (performance.now() - t0) / n; }
 };
 window.__bgReady = true;
