@@ -46,6 +46,9 @@ const js = fs.readFileSync(path.join(OUT, 'js/game.js'), 'utf8').replace(/<\/scr
 let page = html.replace(/<!doctype html>\s*<html[^>]*>\s*<head>/i, '').replace(/<\/head>\s*<body>/i, '').replace(/<\/body>\s*<\/html>\s*$/i, '')
   .replace('<link rel="stylesheet" href="fonts/fonts.css">\n', '').replace('<link rel="stylesheet" href="style.css">', () => '<style>' + css + '</style>')
   .replace('<script type="module" src="js/game.js"></script>', () => '<script type="module">' + js + '</script>');
+page = page.replace('<script type="module">', '<script>window.BG_NATURE_B64 = "assets/nature-glb.txt";</script>\n<script type="module">');
+fs.writeFileSync(path.join(ART, 'assets/nature-glb.txt'), fs.readFileSync(path.join(OUT, 'assets/nature.glb')).toString('base64'));
+fs.rmSync(path.join(ART, 'assets/nature.glb'));
 fs.writeFileSync(path.join(ART, 'index.html'), page);
 
 const kb = p => Math.round(fs.statSync(p).size / 1024);

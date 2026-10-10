@@ -4,7 +4,17 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 export const NATURE = {};
 export async function loadNature(onProgress){
-  const gltf = await new Promise((res, rej) => new GLTFLoader().load('assets/nature.glb', res, e => { if(onProgress && e.total) onProgress(e.loaded / e.total); }, rej));
+  let gltf;
+  if(window.BG_NATURE_B64){
+    // claude.ai preview build: the pack sits next to the page as base64 text (that host doesn't serve .glb files)
+    const txt = await (await fetch(window.BG_NATURE_B64)).text();
+    const bin = Uint8Array.from(atob(txt.trim()), c => c.charCodeAt(0));
+    const cib = window.createImageBitmap; window.createImageBitmap = undefined;   // textures through <img>, not fetch()
+    const p = new Promise((res, rej) => new GLTFLoader().parse(bin.buffer, '', res, rej));
+    window.createImageBitmap = cib;
+    gltf = await p;
+    if(onProgress) onProgress(1);
+  } else gltf = await new Promise((res, rej) => new GLTFLoader().load('assets/nature.glb', res, e => { if(onProgress && e.total) onProgress(e.loaded / e.total); }, rej));
   for(const model of gltf.scene.children){
     model.updateMatrixWorld(true);
     const inv = new THREE.Matrix4().copy(model.matrixWorld).invert();
