@@ -7,13 +7,13 @@ import { buildArena, U, A, segHit } from './arena.js';
 import { applyLang, tr, L } from './i18n.js';
 import { G, on } from './state.js';
 import { HEROES, HERO_IDS } from './heroes.js';
-import { makeFighter, removeFighters, spawn, stepFighter, updateShots, updateLobs, updatePuddles, updateBeams, updateFighterVisuals, damage } from './combat.js';
+import { effectSamples, makeFighter, removeFighters, spawn, stepFighter, updateShots, updateLobs, updatePuddles, updateBeams, updateFighterVisuals, damage } from './combat.js';
 import { makeVisual, animate, setTeamLook, kick } from './anim.js';
 import { newBot, botThink } from './bots.js';
 import { buildMine, startSpores, updateSpores, clearSpores } from './mode.js';
 import { playerInput, updateCamera, updateGuide, CAM, releaseLock, lockHint } from './player.js';
 import { makeTag, updateTags, updateHud, feed, announce, tickAnnounce, renderHeroes, showEnd } from './hud.js';
-import { updateFx, clearFx } from './fx.js';
+import { updateFx, clearFx, explosion, hitSpark, sporeBurst } from './fx.js';
 import { preloadSfx, unlockAudio, sfx, AU, setSfx, setMusic } from './audio.js';
 import { yaInit, yaLoaded, yaTick, yaInterstitial, YA, onYandex } from './yandex.js';
 
@@ -31,6 +31,14 @@ buildArena('glade');
 buildMine();
 applyQuality();
 addEventListener('resize', resize);
+// warm up: put one of every effect in the scene and compile all shaders now, not during the first fight
+{
+  const samples = effectSamples(); samples.forEach(m => scene.add(m));
+  explosion(A.mine.x, A.mine.z, 1.7); hitSpark(0, 1, 0, '#fff'); sporeBurst(0, 1, 0, '#fff', 4);
+  for(const H of HERO_IDS){ const V = makeVisual(H); scene.add(V.root); samples.push(V.root); }
+  try{ renderer.compile(scene, camera); }catch(e){}
+  samples.forEach(m => scene.remove(m)); clearFx(); G.shake = 0;
+}
 $('load').hidden = true;
 
 // ---------------- menu ----------------
