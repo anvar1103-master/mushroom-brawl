@@ -382,3 +382,14 @@ export function updateFighterVisuals(dt, t){
     else if(V.id !== 'wasp' || f.supT >= 1.2) V.mat.userData.u.uTint.value.setScalar(0);
   }
 }
+
+// compile every effect shader while the menu loads, so the first explosion, puddle or beam doesn't stall a frame
+export function effectSamples(){
+  const f = { team:0, x:0, z:0, pow:1, H:{ attack:{} }, V:null };
+  const list = [];
+  const pm = new THREE.Mesh(puddleGeo, puddleMat.clone()); pm.material.uniforms.uTime = puddleU.uTime; list.push(pm);
+  list.push(new THREE.Mesh(bombGeo, bombMat), new THREE.Mesh(markGeo, new THREE.MeshBasicMaterial({ transparent:true, depthWrite:false })));
+  list.push(new THREE.Mesh(beamGeo, glowMat('#FFF6C0', 3)), new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ transparent:true, opacity:0.5, depthWrite:false, blending:THREE.AdditiveBlending })));
+  list.push(new THREE.Mesh(shotGeo, glowMat('#FF6B4A', 2.2)), new THREE.Mesh(needleGeo, glowMat('#FFB21E', 2.2)));
+  return list;
+}

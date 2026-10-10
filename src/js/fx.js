@@ -20,7 +20,7 @@ class Particles {
       transparent:true, depthWrite:false, blending:additive ? THREE.AdditiveBlending : THREE.NormalBlending,
       vertexShader:`attribute vec3 iPos; attribute vec4 iCol; attribute vec2 iSize; varying vec4 vCol; varying vec2 vUv; varying float vSoft;
         void main(){ vCol = iCol; vUv = uv; vSoft = iSize.y;
-          vec4 mv = modelViewMatrix * vec4(iPos, 1.0); mv.xy += position.xy * iSize.x; gl_Position = projectionMatrix * mv; }`,
+          vec4 mv = modelViewMatrix * vec4(iPos, 1.0); mv.xy += position.xy * min(iSize.x, max(-mv.z, 0.1) * 0.22); gl_Position = projectionMatrix * mv; }`,
       fragmentShader:`varying vec4 vCol; varying vec2 vUv; varying float vSoft;
         void main(){ float d = length(vUv - 0.5) * 2.0; float a = clamp(1.0 - d, 0.0, 1.0); a = vSoft > 0.5 ? a * a : smoothstep(0.0, 0.25, a);
           gl_FragColor = vec4(vCol.rgb, vCol.a * a);
@@ -138,10 +138,11 @@ export function clearFx(){
 
 // ---------------- composite effects ----------------
 export function explosion(x, z, r, color = '#FF9A2E'){
-  puff(glow, x, 0.4, z, { n:26, color:'#FFE6A0', sp:r * 4.5, upMin:0.1, upMax:1, life:0.35, s0:0.5, s1:0.1, drag:4 });
-  puff(glow, x, 0.5, z, { n:14, color, sp:r * 2.2, upMin:0.2, life:0.5, s0:r * 0.9, s1:r * 0.3, drag:3, soft:true, a:0.8 });
-  puff(smoke, x, 0.5, z, { n:14, color:'#5A5048', sp:r * 1.6, upMin:0.2, life:1.1, s0:r * 0.5, s1:r * 1.3, drag:2.5, soft:true, a:0.55, vy:0.8, jitter:0.2 });
-  puff(smoke, x, 0.2, z, { n:10, color:'#6B4A2E', sp:5, upMin:0.5, life:0.8, s0:0.12, s1:0.08, grav:14, drag:0.5 });
+  // few big puffs instead of many: overlapping see-through quads are what costs the most
+  puff(glow, x, 0.4, z, { n:14, color:'#FFE6A0', sp:r * 4.5, upMin:0.1, upMax:1, life:0.35, s0:0.45, s1:0.1, drag:4 });
+  puff(glow, x, 0.5, z, { n:6, color, sp:r * 2, upMin:0.2, life:0.45, s0:r * 0.8, s1:r * 0.3, drag:3, soft:true, a:0.85 });
+  puff(smoke, x, 0.5, z, { n:6, color:'#5A5048', sp:r * 1.5, upMin:0.2, life:1.0, s0:r * 0.55, s1:r * 1.2, drag:2.5, soft:true, a:0.5, vy:0.8, jitter:0.2 });
+  puff(smoke, x, 0.2, z, { n:6, color:'#6B4A2E', sp:5, upMin:0.5, life:0.8, s0:0.12, s1:0.08, grav:14, drag:0.5 });
   ring(x, z, 0.3, r * 1.15, 0.4, color);
   scorch(x, z, r * 0.9);
   G.shake = Math.max(G.shake, 0.35);
