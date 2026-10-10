@@ -75,10 +75,9 @@ export function buildEnv(){
   scene.environment = rt.texture;
 }
 
-// «Быстрая»: render the sky (with its clouds) into a cube texture once and use it as a plain background
+// render the sky (with its clouds) into a cube texture once and use it as a plain background: nearly free per frame
 export function bakeSky(){
-  if(!LOW) return;
-  const rt = new THREE.WebGLCubeRenderTarget(256, { type:THREE.HalfFloatType });
+  const rt = new THREE.WebGLCubeRenderTarget(LOW ? 256 : 512, { type:THREE.HalfFloatType });
   const cc = new THREE.CubeCamera(0.5, 400, rt), es = new THREE.Scene();
   const m = new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), skyMat); es.add(m);
   cc.update(renderer, es);
