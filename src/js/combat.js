@@ -1,6 +1,6 @@
 // Fighters, movement, attacks, projectiles, damage, supers and visibility (tall grass hides you).
 import * as THREE from 'three';
-import { scene, camera, Q } from './engine.js';
+import { scene, camera, Q, stdMat } from './engine.js';
 import { G, emit, isEnemy } from './state.js';
 import { HEROES, AMMO } from './heroes.js';
 import { makeVisual, animate, kick, setTeamLook } from './anim.js';
@@ -227,7 +227,7 @@ export function updateShots(dt){
 }
 
 // ---------------- lobbed bombs ----------------
-const bombGeo = new THREE.SphereGeometry(0.16, 12, 10), bombMat = new THREE.MeshStandardMaterial({ color:'#26262E', roughness:0.35, metalness:0.2 });
+const bombGeo = new THREE.SphereGeometry(0.16, 12, 10), bombMat = stdMat({ color:'#26262E', roughness:0.35, metalness:0.2 });
 const markGeo = new THREE.RingGeometry(0.9, 1, 36); markGeo.rotateX(-Math.PI / 2);
 function addLob(f, x1, z1, W, T, delay, isSuper){
   const m = new THREE.Mesh(bombGeo, bombMat); m.castShadow = true;

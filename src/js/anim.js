@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { buildHero, addWings, HEROES } from './heroes.js';
 import { heroMaterial, outlineMaterial, silhouetteMaterial } from './rig.js';
 import { spring, sp, clamp, angDiff, TAU } from './util.js';
-import { Q } from './engine.js';
+import { Q, LOW } from './engine.js';
 
 export const TEAM_COL = { me:'#FFD23F', ally:'#4FC3FF', foe:'#FF4D4D' };
 const ringTex = (() => {
@@ -13,6 +13,13 @@ const ringTex = (() => {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 })();
 const ringGeo = new THREE.PlaneGeometry(1.25, 1.25); ringGeo.rotateX(-Math.PI / 2);
+// without shadow maps («Быстрая») every hero gets a soft round shadow under its feet
+const blobTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 4, 32, 32, 31); gr.addColorStop(0, 'rgba(0,0,0,.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
+})();
+const blobMat = new THREE.MeshBasicMaterial({ map:blobTex, transparent:true, depthWrite:false });
 
 export function makeVisual(heroId){
   const { rig, parts } = buildHero(heroId);
@@ -25,11 +32,13 @@ export function makeVisual(heroId){
   const sil = new THREE.SkinnedMesh(geo, silMat); sil.bind(skel, mesh.bindMatrix); sil.frustumCulled = false; sil.renderOrder = 1; rig.root.add(sil);
   const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ map:ringTex, transparent:true, depthWrite:false, color:'#fff', opacity:0.9 }));
   ring.position.y = 0.03; ring.renderOrder = 1; rig.root.add(ring);
+  let blob = null;
+  if(LOW){ blob = new THREE.Mesh(ringGeo, blobMat); blob.position.y = 0.025; blob.scale.setScalar(0.85); blob.renderOrder = 1; rig.root.add(blob); }
   const B = rig.bones;
   for(const b of rig.list){ b.userData.rest = b.position.clone(); b.userData.rot = b.rotation.clone(); }
   const muzzle = new THREE.Object3D(); muzzle.position.fromArray(parts.muzzle); B.gun.add(muzzle);
   const wings = heroId === 'wasp' ? addWings(rig) : null;
-  const V = { id:heroId, H:HEROES[heroId], root:rig.root, B, mesh, ol, sil, silMat, mat, ring, muzzle, wings, yaw:0, ph:0, lastStep:0,
+  const V = { id:heroId, H:HEROES[heroId], root:rig.root, B, mesh, ol, sil, silMat, mat, ring, blob, muzzle, wings, yaw:0, ph:0, lastStep:0,
     sp:{ twist:sp(), leanX:sp(), leanZ:sp(), headX:sp(), headZ:sp(), squash:sp(), kick:sp(), bodyX:sp(), armR:sp(), armL:sp(), ant:sp(), ely:sp(), pop:sp(1), lift:sp(), gunS:sp(1) },
     prevVX:0, prevVZ:0 };
   return V;
@@ -54,13 +63,13 @@ export function animate(V, f, dt, t){
     root.rotation.set(-k * 1.4, V.yaw + d * 4, 0, 'YXZ');
     const s = d < 0.55 ? 1 + Math.sin(d * 18) * 0.06 : Math.max(0, 1 - (d - 0.55) / 0.2);
     root.scale.setScalar(s);
-    V.ring.visible = false;
+    V.ring.visible = false; if(V.blob) V.blob.visible = false;
     root.visible = s > 0.01;
     V.mat.userData.u.uFlash.value = d < 0.1 ? 0.8 : 0;
     return;
   }
   root.rotation.x = 0; root.rotation.z = 0;
-  V.ring.visible = true;
+  V.ring.visible = true; if(V.blob) V.blob.visible = true;
   // ---------------- facing ----------------
   const spd = Math.hypot(f.vx, f.vz), moving = spd > 0.4;
   const aimHold = f.atkT < 0.55 || f.supT < 0.8 || f.aiming;
