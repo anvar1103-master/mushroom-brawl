@@ -1,0 +1,45 @@
+<!doctype html><html><body>
+<!-- Opened by tools/build-assets.mjs in headless Chromium: packs the chosen nature models into one GLB. -->
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+const KIT = '/.cache/raw/stylized-nature-megakit/glTF/';
+// model -> name in the pack; textures are shrunk to the given size (jpeg when there's no alpha)
+const MODELS = ['Rock_Medium_1', 'Rock_Medium_2', 'Rock_Medium_3', 'Pebble_Round_1', 'Pebble_Square_2',
+  'Grass_Common_Tall', 'Grass_Wispy_Tall', 'Grass_Common_Short', 'Bush_Common', 'CommonTree_3', 'Pine_1', 'Fern_1', 'Plant_1', 'Clover_1', 'Flower_3_Group', 'Mushroom_Common'];
+const TEX = { Rocks_Diffuse:[512, 'jpeg'], PathRocks_Diffuse:[256, 'jpeg'], Bark_NormalTree:[256, 'jpeg'], Leaves_NormalTree:[256, 'png'], Leaves_TwistedTree:[256, 'png'],
+  Leaf_Pine:[256, 'png'], Grass:[64, 'png'], Leaves:[256, 'png'], Flowers:[256, 'png'], Mushrooms:[256, 'jpeg'] };
+const shrink = (tex, key) => {
+  const src = tex.image, nm = key.split('/').pop().replace(/\.png$/, '');
+  const spec = TEX[nm] || [256, 'png'], s = Math.min(spec[0], src.width);
+  const c = document.createElement('canvas'); c.width = c.height = s; c.getContext('2d').drawImage(src, 0, 0, s, s);
+  tex.image = c; tex.userData.mimeType = 'image/' + spec[1]; tex.name = nm; tex.needsUpdate = true; return nm;
+};
+const root = new THREE.Scene(); const L = new GLTFLoader(); const info = {}; const seen = new Map();
+for(const n of MODELS){
+  const J = await (await fetch(KIT + n + '.gltf')).json();
+  const uriOf = {};   // material name -> texture file (the loader hands back ImageBitmaps without names)
+  for(const md of J.materials || []){ const bt = md.pbrMetallicRoughness && md.pbrMetallicRoughness.baseColorTexture; if(bt) uriOf[md.name] = J.images[J.textures[bt.index].source].uri; }
+  const g = await L.loadAsync(KIT + n + '.gltf'); const o = g.scene; o.name = n;
+  let tris = 0; const meshes = [];
+  o.traverse(c => { if(c.isMesh) meshes.push(c); });
+  for(const c of meshes){
+    tris += (c.geometry.index ? c.geometry.index.count : c.geometry.attributes.position.count) / 3;
+    for(const k of ['tangent', 'color']) c.geometry.deleteAttribute(k);   // runtime builds its own materials
+    const m = c.material; m.normalMap = null; m.roughnessMap = null; m.metalnessMap = null;
+    if(!m.map) continue;
+    // the white leaf masks are tinted at runtime: use them instead of the coloured «_C» textures
+    const key = uriOf[m.name].replace(/_C\.png$/, '.png');
+    let tex = m.map;
+    if(!seen.has(key)){ tex = new THREE.Texture(await new Promise(r => { const i = new Image(); i.onload = () => r(i); i.src = KIT + key; })); tex.flipY = false; tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; }
+    if(!seen.has(key)){ shrink(tex, key); seen.set(key, tex); }
+    m.map = seen.get(key); m.name = m.map.name;
+  }
+  info[n] = tris; root.add(o);
+}
+const glb = await new GLTFExporter().parseAsync(root, { binary:true });
+const b = new Uint8Array(glb); let s = ''; for(let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+window.OUT = { glb:btoa(s), info };
+</script></body></html>
