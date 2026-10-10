@@ -11,7 +11,8 @@ export const renderer = new THREE.WebGLRenderer({ canvas, antialias:!TOUCH, powe
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// soft shadows cost several texture reads per pixel: phones get the plain filter
+renderer.shadowMap.type = store.get('q', TOUCH ? 'low' : 'high') === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 
 export const scene = new THREE.Scene();
 export const FOG_COL = new THREE.Color('#BFE3D2');
@@ -83,7 +84,7 @@ export function canvasTex(w, h, draw, opt = {}){
 
 // ---- quality: «high» gets bloom and full resolution; the frame watcher trims resolution when frames run long ----
 export const Q = { level:store.get('q', TOUCH ? 'low' : 'high'), PR:1, post:false, composer:null, bloom:null, perfN:0, perfSum:0, calm:0 };
-export function maxPR(){ return Math.min(Q.level === 'high' ? 2 : 1.35, devicePixelRatio || 1); }
+export function maxPR(){ return Math.min(Q.level === 'high' ? 2 : 1.2, devicePixelRatio || 1); }
 export function resize(){
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false);
@@ -105,7 +106,9 @@ function initPost(){
 export function applyQuality(level){
   if(level){ Q.level = level; store.set('q', level); }
   const hi = Q.level === 'high';
-  Q.PR = maxPR(); renderer.setPixelRatio(Q.PR);
+  Q.PR = Math.min(maxPR(), hi ? 2 : 1); renderer.setPixelRatio(Q.PR);
+  scene.fog.near = hi ? 48 : 30; scene.fog.far = hi ? 120 : 80; camera.far = hi ? 400 : 160; camera.updateProjectionMatrix();
+  sky.scale.setScalar(hi ? 1 : 0.45);   // the sky dome must stay inside the far plane
   const sz = hi ? 2048 : 1024;
   if(sun.shadow.mapSize.x !== sz){ sun.shadow.mapSize.set(sz, sz); if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map = null; } }
   if(hi){ try{ initPost(); }catch(e){ Q.composer = null; } }

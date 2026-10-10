@@ -21,6 +21,12 @@ const MOVE_BLOCK = new Set(['#', 'R', 'T', '~', 'X']);
 const SHOT_BLOCK = new Set(['#', 'R', 'T', 'X']);
 export const blocksMove = ch => MOVE_BLOCK.has(ch);
 export const blocksShot = ch => SHOT_BLOCK.has(ch);
+// tall hedges (and the fence) block the view; rocks and stumps are low enough to see over
+const SIGHT_BLOCK = new Set(['#', 'X']);
+export const blocksSight = ch => SIGHT_BLOCK.has(ch);
+export const sightClear = (x0, z0, x1, z1) => segHit(x0, z0, x1, z1, blocksSight) < 0;
+// height of whatever stands on a tile (for aiming rays and the camera)
+export const tileHeight = ch => ch === '#' || ch === 'X' ? HEDGE_H : ch === 'R' ? 1.15 : ch === 'T' ? 0.9 : 0;
 export const inGrass = (x, z) => tileAtXZ(x, z) === '"';
 
 // push a circle out of every blocked tile it overlaps
@@ -126,7 +132,7 @@ function windify(mat, heightNorm, amt, push){
       // see-through near the camera and around your own hero (dithered, so the grass stays opaque and cheap)
       sh.fragmentShader = 'uniform vec3 uMe;\nvarying vec3 vWPg;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
         float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-        float keep = smoothstep(4.0, 6.5, distance(vWPg, cameraPosition));
+        float keep = smoothstep(1.2, 2.8, distance(vWPg, cameraPosition));
         if(uMe.z > 0.0) keep = min(keep, mix(0.35, 1.0, smoothstep(uMe.z * 0.6, uMe.z, distance(vWPg.xz, uMe.xy))));
         if(ign > keep) discard;`);
     }
@@ -246,8 +252,9 @@ export function buildArena(id){
   fitShadow(A.hx + 2, A.hz + 2);
   for(let r = 0; r < A.H; r++) for(let c = 0; c < A.W; c++){
     const ch = A.rows[r][c];
-    if(ch === 'b') A.spawns[0].push({ x:tileX(c), z:tileZ(r) });
-    if(ch === 'r') A.spawns[1].push({ x:tileX(c), z:tileZ(r) });
+    // spawn a little inside the fence so the camera has room behind the hero
+    if(ch === 'b') A.spawns[0].push({ x:tileX(c), z:tileZ(r) - 3.2 });
+    if(ch === 'r') A.spawns[1].push({ x:tileX(c), z:tileZ(r) + 3.2 });
     if(ch === 'M') A.mine = { x:tileX(c), z:tileZ(r) };
     if(ch === '"') A.grassTiles.push([c, r]);
   }
@@ -320,7 +327,7 @@ function hedgeMat(){
   if(!A.shared.hedge){ A.shared.hedge = triplanar(new THREE.MeshStandardMaterial({ map:leafTex(), vertexColors:true, roughness:0.85, color:'#E8FFD8' }), 0.55); }
   return A.shared.hedge;
 }
-export const HEDGE_H = 1.35;
+export const HEDGE_H = 2.6;
 function buildHedges(){
   const geos = [], used = new Set(), W = A.W, H = A.H;
   const isH = (c, r) => tileAt(c, r) === '#';
@@ -338,16 +345,16 @@ function buildHedges(){
   }
   // the fence around the arena
   const hx = A.hx, hz = A.hz, t = 1.3;
-  addBlock(geos, -hx - t, -hz - t, A.W * TILE + 2 * t, t, 1.2);
-  addBlock(geos, -hx - t, hz, A.W * TILE + 2 * t, t, 1.2);
-  addBlock(geos, -hx - t, -hz, t, A.H * TILE, 1.2);
-  addBlock(geos, hx, -hz, t, A.H * TILE, 1.2);
+  addBlock(geos, -hx - t, -hz - t, A.W * TILE + 2 * t, t, 3.0);
+  addBlock(geos, -hx - t, hz, A.W * TILE + 2 * t, t, 3.0);
+  addBlock(geos, -hx - t, -hz, t, A.H * TILE, 3.0);
+  addBlock(geos, hx, -hz, t, A.H * TILE, 3.0);
   const m = new THREE.Mesh(mergeGeometries(geos), hedgeMat());
   m.castShadow = m.receiveShadow = true; A.group.add(m);
   geos.forEach(g => g.dispose());
   // a few leafy tufts and flowers on top so the walls read as living bushes
   const tufts = [];
-  for(let r = 0; r < H; r++) for(let c = 0; c < W; c++) if(isH(c, r) && rand() < 0.3) tufts.push({ x:tileX(c) + rand(-0.4, 0.4), y:HEDGE_H - 0.25, z:tileZ(r) + rand(-0.4, 0.4), rot:rand(0, TAU), s:rand(0.32, 0.42) });
+  for(let r = 0; r < H; r++) for(let c = 0; c < W; c++) if(isH(c, r) && Q.level === 'high' && rand() < 0.3) tufts.push({ x:tileX(c) + rand(-0.4, 0.4), y:HEDGE_H - 0.3, z:tileZ(r) + rand(-0.4, 0.4), rot:rand(0, TAU), s:rand(0.32, 0.42) });
   instanceModel('Bush_Common', tufts, () => leafMat('#4FA23A'), { cast:false });
 }
 function addBlock(geos, x0, z0, sx, sz, h = HEDGE_H){
@@ -399,7 +406,7 @@ function grassPatchGeo(n){
   const pos = [], col = [], nor = [], idx = [];
   const c0 = new THREE.Color(), c1 = new THREE.Color();
   for(let i = 0; i < n; i++){
-    const x = rand(-0.82, 0.82), z = rand(-0.82, 0.82), h = rand(0.85, 1.3), w = rand(0.07, 0.12), a = rand(0, TAU), lean = rand(0.15, 0.45), la = rand(0, TAU);
+    const x = rand(-0.82, 0.82), z = rand(-0.82, 0.82), h = rand(1.15, 1.65), w = rand(0.08, 0.13), a = rand(0, TAU), lean = rand(0.15, 0.45), la = rand(0, TAU);
     const ca = Math.cos(a), sa = Math.sin(a);
     c0.setHSL(rand(0.27, 0.31), rand(0.6, 0.75), rand(0.1, 0.15)); c1.setHSL(rand(0.22, 0.28), rand(0.6, 0.8), rand(0.3, 0.4));
     const base = pos.length / 3;
@@ -426,7 +433,7 @@ function grassPatchGeo(n){
 function buildGrass(){
   const n = Q.level === 'high' ? 70 : 46;
   const geos = [grassPatchGeo(n), grassPatchGeo(n), grassPatchGeo(n)];
-  const mat = windify(new THREE.MeshStandardMaterial({ vertexColors:true, roughness:1, side:THREE.DoubleSide, envMapIntensity:0.5 }), 1.3, 0.12, true);
+  const mat = windify(new THREE.MeshStandardMaterial({ vertexColors:true, roughness:1, side:THREE.DoubleSide, envMapIntensity:0.5 }), 1.6, 0.12, true);
   grassMeshes = [];
   geos.forEach((geo, k) => {
     const tiles = A.grassTiles.filter((t, i) => i % 3 === k);

@@ -1,10 +1,10 @@
 // Fighters, movement, attacks, projectiles, damage, supers and visibility (tall grass hides you).
 import * as THREE from 'three';
-import { scene } from './engine.js';
+import { scene, camera, Q } from './engine.js';
 import { G, emit, isEnemy } from './state.js';
 import { HEROES, AMMO } from './heroes.js';
 import { makeVisual, animate, kick, setTeamLook } from './anim.js';
-import { collide, segHit, inGrass, A, blocksMove, tileAtXZ } from './arena.js';
+import { collide, segHit, inGrass, A, blocksMove, tileAtXZ, sightClear } from './arena.js';
 import { glow, smoke, puff, explosion, hitSpark, sporeBurst, dmgNumber, dust, ring } from './fx.js';
 import { clamp, rand, TAU, lerp } from './util.js';
 import { sfx } from './audio.js';
@@ -40,7 +40,7 @@ export function spawn(f, at){
   const p = at || list[(f.slot ?? 0) % list.length];
   f.x = p.x; f.z = p.z; f.vx = f.vz = f.kx = f.kz = 0;
   f.alive = true; f.hp = f.max; f.ammo = AMMO; f.cdT = 0; f.deadT = 0; f.spawnT = 0; f.shieldT = SPAWN_SHIELD; f.regenT = 0;
-  f.aim = f.team === 0 ? Math.PI : 0; f.V.yaw = f.aim; f.atkT = f.supT = 9; f.pendingBeam = null; f.stunT = 0; f.gems = 0;
+  f.aim = f.team === 0 ? Math.PI : 0; f.V.yaw = f.aim; f.atkT = f.supT = 9; f.spot = [0, 0]; f.pendingBeam = null; f.stunT = 0; f.gems = 0;
   f.V.root.visible = true; f.V.root.scale.setScalar(1);
   setTeamLook(f.V, lookFor(f));
   kick.spawn(f.V);
@@ -52,6 +52,16 @@ export function spawn(f, at){
 
 // ---------------- visibility: tall grass hides you unless an enemy is close, or you just attacked or got hit ----------------
 export const REVEAL_R = 3.2;
+// seeing through hedges: an outline within SEE_R, any distance once a teammate has hit (spotted) the enemy
+export const SEE_R = 10, SPOT_T = 3.5;
+export const spotted = (team, f) => f.spot && f.spot[team] > 0;
+export function canSee(viewer, f){
+  if(f.team === viewer.team) return true;
+  if(!visibleTo(viewer.team, f)) return false;
+  if(spotted(viewer.team, f)) return true;
+  const dx = f.x - viewer.x, dz = f.z - viewer.z;
+  return dx * dx + dz * dz < SEE_R * SEE_R || sightClear(viewer.x, viewer.z, f.x, f.z);
+}
 export function visibleTo(team, f){
   if(f.team === team) return true;
   if(!f.alive) return true;
@@ -227,7 +237,7 @@ function addLob(f, x1, z1, W, T, delay, isSuper){
   mark.position.set(x1, 0.05, z1); mark.scale.setScalar(W.radius); mark.renderOrder = 3; scene.add(mark);
   // start from the throwing hand
   muzzlePos(f, MZ);
-  G.lobs.push({ owner:f, team:f.team, x0:MZ.x, z0:MZ.z, y0:1.0, x1, z1, T, t:-delay, W, isSuper, m, mark, h:2.2 + Math.hypot(x1 - f.x, z1 - f.z) * 0.18 });
+  G.lobs.push({ owner:f, team:f.team, x0:MZ.x, z0:MZ.z, y0:1.0, x1, z1, T, t:-delay, W, isSuper, m, mark, h:3.2 + Math.hypot(x1 - f.x, z1 - f.z) * 0.2 });
 }
 export function updateLobs(dt){
   for(let i = G.lobs.length - 1; i >= 0; i--){
@@ -332,13 +342,14 @@ export function damage(o, amount, src, isSuper, quiet){
   if(!o.alive || o.shieldT > 0 || amount <= 0 || (G.match && G.match.over)) return 0;
   amount = Math.round(amount);
   o.hp -= amount; o.flash = 1; o.regenT = 0; o.revealT = Math.max(o.revealT, 0.6); o.lastHitBy = src;
+  if(src && src.team !== o.team){ o.spot = o.spot || [0, 0]; o.spot[src.team] = SPOT_T; }
   if(src){
     src.dmgDone += amount; src.regenT = Math.min(src.regenT, REGEN_DELAY * 0.5);
     if(!isSuper && src.charge < 1){ src.charge = Math.min(1, src.charge + amount / src.H.super.charge); if(src.charge >= 1) emit('superReady', src); }
   }
   if(!quiet) kick.hurt(o.V);
   const meTeam = G.me ? G.me.team : 0;
-  if(visibleTo(meTeam, o) || o === G.me) dmgNumber(o.x, o.H.height + 0.25, o.z, amount, o === G.me ? 'me' : src === G.me ? 'mine' : '');
+  if((G.me && canSee(G.me, o)) || o === G.me || src === G.me) dmgNumber(o.x, o.H.height + 0.25, o.z, amount, o === G.me ? 'me' : src === G.me ? 'mine' : '');
   emit('damage', o, amount, src);
   if(o.hp <= 0) kill(o, src);
   return amount;
@@ -355,12 +366,17 @@ export function updateFighterVisuals(dt, t){
   const meTeam = G.me ? G.me.team : 0;
   for(const f of G.fighters){
     const V = f.V;
-    f.seen = visibleTo(meTeam, f);
+    if(f.spot){ f.spot[0] = Math.max(0, f.spot[0] - dt); f.spot[1] = Math.max(0, f.spot[1] - dt); }
+    f.seen = G.me ? canSee(G.me, f) : true;
     animate(V, f, dt, t);
     if(f.alive && !f.seen) V.root.visible = false;
     // hiding in grass: you and your allies turn see-through
-    const ghost = f.alive && f.inGrass && f.team === meTeam;
-    if(V.mat.transparent !== ghost){ V.mat.transparent = ghost; V.mat.opacity = ghost ? 0.55 : 1; V.mat.depthWrite = !ghost; }
+    // and your own hero fades when the camera is pressed right up against it
+    let op = f.alive && f.inGrass && f.team === meTeam ? 0.55 : 1;
+    if(f === G.me && G.state !== 'menu'){ const cd = camera.position.distanceTo(V.root.position) - 0.6; if(cd < 2.2) op = Math.min(op, Math.max(0.15, (cd - 0.6) / 1.6)); }
+    const ghost = op < 1;
+    if(V.mat.transparent !== ghost){ V.mat.transparent = ghost; V.mat.depthWrite = !ghost; V.ol.visible = !ghost && Q.level === 'high'; }
+    V.mat.opacity = op;
     // spawn shield shimmer
     if(f.shieldT > 0) V.mat.userData.u.uTint.value.setScalar(0.12 + Math.sin(t * 20) * 0.08);
     else if(V.id !== 'wasp' || f.supT >= 1.2) V.mat.userData.u.uTint.value.setScalar(0);

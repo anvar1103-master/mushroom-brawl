@@ -45,7 +45,7 @@ function renderMenu(){
   renderHeroes(MENU.hero, id => { MENU.hero = id; store.set('hero', id); sfx('select'); renderMenu(); setPreview(id); });
   for(const [id, val] of [['m-diff', MENU.diff], ['m-q', Q.level]]) for(const b of $(id).querySelectorAll('button')) b.classList.toggle('sel', b.dataset.v === val);
   for(const b of $('m-snd').querySelectorAll('button')){ const on = b.dataset.v === 'sfx' ? AU.sfxOn : AU.musicOn; b.classList.toggle('sel', on); b.classList.toggle('off', !on); }
-  $('howto').textContent = tr(TOUCH ? 'Левый палец — бег. Кнопка атаки: нажми — автоприцел, потяни — целься сам. Звезда — супер.' : 'WASD — бег, мышь — прицел, ЛКМ — атака, ПКМ или E — супер, Esc — пауза.');
+  $('howto').textContent = tr(TOUCH ? 'Левый палец — бег, правый — поворот камеры. Кнопка атаки: короткое нажатие — автоприцел, с протяжкой — целишься сам. Звезда — супер.' : 'WASD — бег, мышь — камера и прицел, ЛКМ — атака, ПКМ или E — супер, Esc — пауза.');
 }
 $('m-diff').onclick = e => { const v = e.target.dataset.v; if(!v) return; MENU.diff = v; store.set('diff', v); sfx('click'); renderMenu(); };
 $('m-q').onclick = e => { const v = e.target.dataset.v; if(!v) return; applyQuality(v); sfx('click'); renderMenu(); };
@@ -86,10 +86,10 @@ function startMatch(opts = {}){
     if(isMe) G.me = f; else f.bot = newBot(opts.diff || MENU.diff);
   }
   for(const f of G.fighters){ makeTag(f); spawn(f); }
-  CAM.yaw = G.me.team === 0 ? Math.PI : 0; CAM.x = G.me.x; CAM.z = G.me.z; CAM.look = 6.5;
+  CAM.yaw = G.me.team === 0 ? Math.PI : 0; CAM.x = G.me.x; CAM.z = G.me.z; CAM.pitch = -0.08;
   G.state = 'countdown'; countT = 3.2; lastCount = 4; endT = 0;
   $('menu').hidden = true; $('end').hidden = true; $('hud').hidden = false;
-  $('touch').hidden = !TOUCH; $('superpc').hidden = TOUCH; $('ammopc').hidden = TOUCH;
+  $('touch').hidden = !TOUCH; $('superpc').hidden = TOUCH; $('ammopc').hidden = TOUCH; document.body.classList.toggle('touch-on', TOUCH);
   $('lockhint').hidden = TOUCH;
   announce('Споры', 'Собери 10 спор и удержи их 15 секунд', 'sun', 2.4);
 }

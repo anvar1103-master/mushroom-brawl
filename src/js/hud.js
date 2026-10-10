@@ -4,7 +4,9 @@ import { camera } from './engine.js';
 import { G } from './state.js';
 import { $, esc, TOUCH, clamp } from './util.js';
 import { HEROES, HERO_IDS, ICONS, AMMO } from './heroes.js';
-import { lookFor } from './combat.js';
+import { lookFor, spotted } from './combat.js';
+import { AIM } from './player.js';
+import { sightClear } from './arena.js';
 import { SPORES } from './mode.js';
 import { tr } from './i18n.js';
 
@@ -15,7 +17,7 @@ const gem = '<span class="gem-ico"></span>';
 export function makeTag(f){
   const el = document.createElement('div');
   el.className = 'tag ' + lookFor(f);
-  el.innerHTML = `<div class="gm" hidden>${gem}<b></b></div><div class="tn">${esc(f.name)}</div><div class="hpb"><s></s><u></u><b></b></div>` + (f === G.me ? '<div class="am">' + '<i><u></u></i>'.repeat(AMMO) + '</div>' : '') + '<i class="sup"></i>';
+  el.innerHTML = `<div class="gm" hidden>${gem}<b></b></div><div class="tn">${esc(f.name)}</div><div class="hpb"><s></s><u></u><b></b></div>` + (f === G.me ? '<div class="am">' + '<i><u></u></i>'.repeat(AMMO) + '</div>' : '') + '<i class="sup"></i><i class="spot">!</i>';
   $('hud-world').appendChild(el);
   f.tag = { el, gm:el.querySelector('.gm'), gmb:el.querySelector('.gm b'), u:el.querySelector('.hpb u'), s:el.querySelector('.hpb s'), b:el.querySelector('.hpb b'), am:[...el.querySelectorAll('.am i')], last:{} };
 }
@@ -23,12 +25,16 @@ export function updateTags(){
   const w = innerWidth, h = innerHeight;
   for(const f of G.fighters){
     const T = f.tag; if(!T) continue;
-    const show = f.alive && f.seen && G.state !== 'menu' && $('end').hidden;
+    const show = f.alive && f.seen && G.state !== 'menu' && $('end').hidden && f !== G.me;
     if(!show){ if(T.last.vis !== false){ T.el.style.display = 'none'; T.last.vis = false; } continue; }
     V3.set(f.V.root.position.x, f.H.height + (f.H.hover || 0) + 0.45, f.V.root.position.z).project(camera);
     if(V3.z > 1 || Math.abs(V3.x) > 1.2 || Math.abs(V3.y) > 1.2){ if(T.last.vis !== false){ T.el.style.display = 'none'; T.last.vis = false; } continue; }
     if(T.last.vis !== true){ T.el.style.display = ''; T.last.vis = true; }
-    T.el.style.transform = `translate(${((V3.x * 0.5 + 0.5) * w).toFixed(1)}px,${((-V3.y * 0.5 + 0.5) * h).toFixed(1)}px) translate(-50%,-100%)`;
+    // labels shrink with distance so far fighters don't clutter the view
+    const dist = camera.position.distanceTo(f.V.root.position), sc = Math.max(0.5, Math.min(1.05, 7 / dist));
+    T.el.style.transform = `translate(${((V3.x * 0.5 + 0.5) * w).toFixed(1)}px,${((-V3.y * 0.5 + 0.5) * h).toFixed(1)}px) translate(-50%,-100%) scale(${sc.toFixed(2)})`;
+    const sp = G.me && f.team !== G.me.team && spotted(G.me.team, f) && !sightClear(G.me.x, G.me.z, f.x, f.z);
+    if(T.last.sp !== sp){ T.el.classList.toggle('spotted', sp); T.last.sp = sp; }
     const hp = Math.max(0, Math.ceil(f.hp)), pct = (hp / f.max * 100).toFixed(1) + '%';
     if(T.last.hp !== hp){ T.u.style.width = pct; T.s.style.width = pct; T.b.textContent = hp; T.last.hp = hp; }
     if(T.last.gems !== f.gems){ T.gm.hidden = !f.gems; T.gmb.textContent = f.gems; T.last.gems = f.gems; }
@@ -63,6 +69,12 @@ export function updateHud(){
   const segs = $('ammopc').children;
   for(let i = 0; i < segs.length; i++){ const a = clamp(me.ammo - i, 0, 1); segs[i].firstChild.style.width = (a * 100).toFixed(0) + '%'; segs[i].classList.toggle('full', a >= 1); }
   touchAmmo(me);
+  const hp = Math.max(0, Math.ceil(me.hp)), hk = hp + '/' + me.id; if(updateHud.hp !== hk){ updateHud.hp = hk; $('mehp').firstChild.style.width = (hp / me.max * 100).toFixed(1) + '%'; $('mehp').lastChild.textContent = hp; }
+  // crosshair: red on an enemy in range, pale red when out of range, dim with no charges
+  const xc = AIM.foe ? (AIM.inRange ? 'foe' : 'far') : '';
+  const xk = 'xhair ' + xc + (me.ammo < 1 ? ' empty' : '') + (me.H.attack.kind === 'lob' ? ' lob' : '');
+  const xh = $('xhair'); if(xh.className !== xk) xh.className = xk;
+  xh.hidden = !me.alive;
   // respawn
   const dead = $('dead');
   if(!me.alive && !M.over){ dead.hidden = false; $('dead-n').textContent = Math.max(1, Math.ceil(me.respawnT)); } else dead.hidden = true;
@@ -74,7 +86,7 @@ function touchAmmo(me){
     let s = ''; for(let i = 0; i < AMMO; i++){ s += `<path class="tammo-seg" stroke="rgba(0,0,0,.35)" d="${arc(i)}"/><path class="tammo-seg" id="tam${i}" stroke="#FFC93C" d="${arc(i)}"/>`; }
     g.innerHTML = s;
   }
-  for(let i = 0; i < AMMO; i++){ const a = clamp(me.ammo - i, 0, 1), el = $('tam' + i), len = el.getTotalLength(); el.style.strokeDasharray = len; el.style.strokeDashoffset = (len * (1 - a)).toFixed(1); el.setAttribute('stroke', a >= 1 ? '#FFC93C' : '#FF8A3D'); }
+  for(let i = 0; i < AMMO; i++){ const a = clamp(me.ammo - i, 0, 1), el = $('tam' + i), len = el._len || (el._len = el.getTotalLength()); el.style.strokeDasharray = len; el.style.strokeDashoffset = (len * (1 - a)).toFixed(1); el.setAttribute('stroke', a >= 1 ? '#FFC93C' : '#FF8A3D'); }
 }
 function arc(i){
   const c = 60, r = 54, gap = 0.12, a0 = -Math.PI / 2 + (i / AMMO) * Math.PI * 2 + gap, a1 = -Math.PI / 2 + ((i + 1) / AMMO) * Math.PI * 2 - gap;
