@@ -6,7 +6,7 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const RAW = path.join(ROOT, '.cache/raw');
 
 // ---------- models ----------
-{
+if(!process.argv.includes('--sfx-only')){
   const b = await chromium.launch({ args:['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const p = await b.newPage();
   p.on('pageerror', e => console.log('page error', e.message));
@@ -43,7 +43,7 @@ const SFX = [
   ['step', 'kenney_impact-sounds', 'footstep_grass_000'],
   ['rustle', 'kenney_rpg-audio', 'cloth4'],
   ['countdown', 'kenney_interface-sounds', 'tick_002'],
-  ['start', 'kenney_voiceover-pack-fighter', 'fight'],
+  ['start', 'kenney_interface-sounds', 'confirmation_003'],
   ['win', 'kenney_music-jingles', 'jingles_PIZZI10'],
   ['lose', 'kenney_music-jingles', 'jingles_PIZZI07'],
   ['respawn', 'kenney_digital-audio', 'phaseJump1'],
@@ -55,7 +55,7 @@ let total = 0;
 for(const [out, pack, file] of SFX){
   const src = find(path.join(RAW, pack), file); if(!src){ console.log('missing', pack, file); continue; }
   const dst = path.join(outDir, out + '.mp3');
-  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-ac', '1', '-ar', '32000', '-b:a', '48k', '-af', 'silenceremove=start_periods=1:start_threshold=-50dB', dst]);
+  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-ac', '1', '-ar', '44100', '-b:a', '96k', '-af', 'silenceremove=start_periods=1:start_threshold=-60dB', dst]);
   total += fs.statSync(dst).size;
 }
 console.log('sfx', SFX.length, Math.round(total / 1024) + ' KB');

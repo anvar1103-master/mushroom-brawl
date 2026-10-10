@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { buildHero, addWings, HEROES } from './heroes.js';
 import { heroMaterial, outlineMaterial, silhouetteMaterial } from './rig.js';
 import { spring, sp, clamp, angDiff, TAU } from './util.js';
+import { Q } from './engine.js';
 
 export const TEAM_COL = { me:'#FFD23F', ally:'#4FC3FF', foe:'#FF4D4D' };
 const ringTex = (() => {
@@ -19,6 +20,7 @@ export function makeVisual(heroId){
   const { mesh, geo, skel } = rig.build(mat);
   mesh.renderOrder = 2;
   const ol = new THREE.SkinnedMesh(geo, outlineMaterial()); ol.bind(skel, mesh.bindMatrix); ol.frustumCulled = false; ol.renderOrder = 2; rig.root.add(ol);
+  ol.visible = Q.level === 'high';   // outlines are a second pass over the hero: phones skip them
   const silMat = silhouetteMaterial('#FFFFFF');
   const sil = new THREE.SkinnedMesh(geo, silMat); sil.bind(skel, mesh.bindMatrix); sil.frustumCulled = false; sil.renderOrder = 1; rig.root.add(sil);
   const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ map:ringTex, transparent:true, depthWrite:false, color:'#fff', opacity:0.9 }));

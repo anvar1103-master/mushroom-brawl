@@ -5,8 +5,8 @@ export const EN = {
   'Споры':'Spore Rush', '3 на 3 · собери 10 спор и удержи их 15 секунд':'3 vs 3 · collect 10 spores and hold them for 15 seconds',
   'Боты':'Bots', 'Лёгкие':'Easy', 'Обычные':'Normal', 'Сложные':'Hard', 'В бой!':'Fight!', 'Графика':'Graphics', 'Быстрая':'Fast', 'Красивая':'Pretty',
   'Звук':'Sound', 'Эффекты':'Effects', 'Музыка':'Music', 'Пауза':'Pause', 'Продолжить':'Resume', 'Выйти в меню':'Quit to menu', 'Атака':'Attack',
-  'Левый палец — бег. Кнопка атаки: нажми — автоприцел, потяни — целься сам. Звезда — супер.':'Left thumb to run. Attack button: tap to auto-aim, drag to aim yourself. The star is your super.',
-  'WASD — бег, мышь — прицел, ЛКМ — атака, ПКМ или E — супер, Esc — пауза.':'WASD to run, mouse to aim, LMB to attack, RMB or E for the super, Esc to pause.',
+  'Левый палец — бег, правый — поворот камеры. Кнопка атаки: короткое нажатие — автоприцел, с протяжкой — целишься сам. Звезда — супер.':'Left thumb to run, right thumb to turn the camera. Attack button: a quick tap auto-aims, hold and drag to aim yourself. The star is your super.',
+  'WASD — бег, мышь — камера и прицел, ЛКМ — атака, ПКМ или E — супер, Esc — пауза.':'WASD to run, mouse to look and aim, LMB to attack, RMB or E for the super, Esc to pause.',
   'Здоровье':'Health', 'Урон':'Damage', 'Дальность':'Range', 'Скорость':'Speed', 'м':'m',
   // heroes
   'Шляпник':'Capper', 'Бабах':'Kaboom', 'Жалка':'Stinga', 'мухомор':'fly agaric', 'жук-бомбардир':'bombardier beetle', 'оса':'wasp',

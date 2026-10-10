@@ -1,16 +1,27 @@
-// The player's controls (mouse + keys on PC, joystick + attack buttons on phones), follow camera and aim guides.
+// The player's controls and the over-the-shoulder camera.
+//   PC: WASD to run, the mouse turns the camera, the crosshair in the middle of the screen is where you shoot.
+//   Phones: left thumb runs, dragging anywhere on the right turns the camera; the attack button fires at the
+//   crosshair, a quick tap aims at the nearest enemy you can see.
 import * as THREE from 'three';
 import { camera, canvas, scene } from './engine.js';
 import { G } from './state.js';
-import { $, clamp, angDiff, TOUCH, TAU, store, lerp } from './util.js';
-import { visibleTo, canAttack, SHOT_Y } from './combat.js';
-import { segHit, A } from './arena.js';
+import { $, clamp, angDiff, TOUCH, store, lerp } from './util.js';
+import { canAttack, canSee, SHOT_Y } from './combat.js';
+import { segHit, A, tileAtXZ, tileHeight, blocksSight, HEDGE_H } from './arena.js';
 import { unlockAudio } from './audio.js';
 
-export const CAM = { yaw:Math.PI, look:6.5, x:0, z:0, y:0, dist:6.6, height:5.0, autoT:0, sens:store.get('sens', 1), shakeT:0 };
-const keys = {}, mouse = { l:false, r:false, x:0, y:0, free:true };
+export const CAM = { yaw:Math.PI, pitch:-0.08, x:0, z:0, dist:3.5, pivotH:1.6, shoulder:0.6, sens:store.get('sens', 1), turnTo:null };
+const PITCH_MIN = -0.6, PITCH_MAX = 0.38;
+const keys = {}, mouse = { l:false, r:false, x:0, y:0 };
 export let locked = false;
-export const T = { move:null, atk:null, sup:null, cam:null, autoAim:true };   // active touches
+export const T = { move:null, atk:null, sup:null, cam:null };   // active touches
+export const AIM = { x:0, y:0, z:0, foe:null, inRange:false, gx:0, gz:0, groundHit:false };
+
+function look(dx, dy, k){
+  CAM.yaw -= dx * k * CAM.sens;
+  CAM.pitch = clamp(CAM.pitch - dy * k * CAM.sens, PITCH_MIN, PITCH_MAX);
+  CAM.turnTo = null;
+}
 
 // ---------------- keyboard & mouse ----------------
 addEventListener('keydown', e => {
@@ -30,11 +41,9 @@ canvas.addEventListener('mousedown', e => {
 addEventListener('mouseup', e => { if(e.button === 0) mouse.l = false; if(e.button === 2) mouse.r = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 addEventListener('mousemove', e => {
+  // without pointer lock the camera still follows the mouse while it moves over the field
+  if((locked || (inMatch() && !TOUCH)) && !G.paused) look(e.movementX, e.movementY, 0.0026);
   mouse.x = e.clientX; mouse.y = e.clientY;
-  if(locked){
-    CAM.yaw -= e.movementX * 0.0032 * CAM.sens;
-    CAM.look = clamp(CAM.look - e.movementY * 0.03 * CAM.sens, 2.5, 16);
-  }
 });
 let everLocked = false;
 document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; if(locked) everLocked = true; });
@@ -42,8 +51,7 @@ export function lockHint(){ const el = $('lockhint'); const v = !locked && !ever
 export function releaseLock(){ if(document.exitPointerLock && locked) document.exitPointerLock(); }
 const inMatch = () => G.state === 'play' || G.state === 'countdown';
 
-// ---------------- touch: left joystick, attack + super buttons, drag to turn the camera ----------------
-const stick = { el:null, knob:null };
+// ---------------- touch ----------------
 function stickAt(x, y){ const b = $('stick'); b.style.left = x + 'px'; b.style.top = y + 'px'; b.hidden = false; }
 function onTouchStart(e){
   unlockAudio();
@@ -52,15 +60,18 @@ function onTouchStart(e){
     const tgt = t.target.closest && t.target.closest('[data-btn]');
     if(tgt){
       const kind = tgt.dataset.btn;
-      if(kind === 'atk' && !T.atk){ T.atk = { id:t.identifier, x0:t.clientX, y0:t.clientY, dx:0, dy:0, manual:false, el:tgt }; tgt.classList.add('on'); }
-      else if(kind === 'sup' && !T.sup && G.me && G.me.charge >= 1){ T.sup = { id:t.identifier, x0:t.clientX, y0:t.clientY, dx:0, dy:0, manual:false, el:tgt }; tgt.classList.add('on'); }
+      if((kind === 'atk' && !T.atk) || (kind === 'sup' && !T.sup && G.me && G.me.charge >= 1)){
+        T[kind] = { id:t.identifier, x:t.clientX, y:t.clientY, moved:0, t0:performance.now(), el:tgt };
+        tgt.classList.add('on');
+      }
       continue;
     }
-    if(t.clientX < innerWidth * 0.45 && !T.move){ T.move = { id:t.identifier, x0:t.clientX, y0:t.clientY, dx:0, dy:0 }; stickAt(t.clientX, t.clientY); }
-    else if(!T.cam){ T.cam = { id:t.identifier, x:t.clientX, y:t.clientY }; }
+    if(t.clientX < innerWidth * 0.42 && !T.move){ T.move = { id:t.identifier, x0:t.clientX, y0:t.clientY, dx:0, dy:0 }; stickAt(t.clientX, t.clientY); }
+    else if(!T.cam) T.cam = { id:t.identifier, x:t.clientX, y:t.clientY };
   }
   e.preventDefault();
 }
+const TOUCH_K = 0.0055;
 function onTouchMove(e){
   for(const t of e.changedTouches){
     if(T.move && t.identifier === T.move.id){
@@ -68,13 +79,15 @@ function onTouchMove(e){
       if(d > R){ T.move.x0 += dx * (1 - R / d); T.move.y0 += dy * (1 - R / d); dx = t.clientX - T.move.x0; dy = t.clientY - T.move.y0; stickAt(T.move.x0, T.move.y0); }
       T.move.dx = dx / R; T.move.dy = dy / R;
       $('knob').style.transform = `translate(${dx}px,${dy}px)`;
-    } else if(T.cam && t.identifier === T.cam.id){
-      CAM.yaw -= (t.clientX - T.cam.x) * 0.006; CAM.autoT = 1.5;
-      T.cam.x = t.clientX; T.cam.y = t.clientY;
-    } else for(const k of ['atk', 'sup']){
+      continue;
+    }
+    if(T.cam && t.identifier === T.cam.id){ look(t.clientX - T.cam.x, t.clientY - T.cam.y, TOUCH_K); T.cam.x = t.clientX; T.cam.y = t.clientY; continue; }
+    // dragging a held attack button also turns the camera, so you can aim and shoot with one thumb
+    for(const k of ['atk', 'sup']){
       const B = T[k]; if(!B || t.identifier !== B.id) continue;
-      B.dx = t.clientX - B.x0; B.dy = t.clientY - B.y0;
-      if(Math.hypot(B.dx, B.dy) > 18) B.manual = true;
+      const dx = t.clientX - B.x, dy = t.clientY - B.y;
+      B.moved += Math.abs(dx) + Math.abs(dy);
+      look(dx, dy, TOUCH_K * 0.8); B.x = t.clientX; B.y = t.clientY;
     }
   }
   e.preventDefault();
@@ -86,157 +99,150 @@ function onTouchEnd(e){
     for(const k of ['atk', 'sup']){
       const B = T[k]; if(!B || t.identifier !== B.id) continue;
       B.el.classList.remove('on');
-      if(G.me && G.me.alive){
-        const pt = B.manual ? manualTarget(k === 'sup', B) : autoTarget(k === 'sup');
-        G.me.inp.tx = pt.x; G.me.inp.tz = pt.z;
-        if(k === 'sup') G.me.inp.sup = true; else G.me.inp.fire = true;
-        G.me.touchAim = pt;
+      const me = G.me;
+      if(me && me.alive){
+        // a quick tap: aim at the nearest enemy we can see; a drag: shoot where the crosshair is
+        const tap = B.moved < 14 && performance.now() - B.t0 < 350;
+        const pt = (tap && autoTarget(k === 'sup')) || aimFor(me, k === 'sup');
+        me.inp.tx = pt.x; me.inp.tz = pt.z;
+        if(k === 'sup') me.inp.sup = true; else me.inp.fire = true;
+        me.inp.locked = true;
+        if(tap && pt.foe) CAM.turnTo = Math.atan2(pt.x - me.x, pt.z - me.z);
       }
       T[k] = null;
     }
   }
 }
-for(const el of [document]){
-  el.addEventListener('touchstart', onTouchStart, { passive:false });
-  el.addEventListener('touchmove', onTouchMove, { passive:false });
-  el.addEventListener('touchend', onTouchEnd); el.addEventListener('touchcancel', onTouchEnd);
-}
+document.addEventListener('touchstart', onTouchStart, { passive:false });
+document.addEventListener('touchmove', onTouchMove, { passive:false });
+document.addEventListener('touchend', onTouchEnd); document.addEventListener('touchcancel', onTouchEnd);
 
-// manual aim from a dragged button: screen drag → direction relative to the camera, length → distance (for lobs)
-function manualTarget(sup, B){
-  const me = G.me, W = sup ? me.H.super : me.H.attack;
-  const a = CAM.yaw + Math.atan2(B.dx, -B.dy) + Math.PI;
-  const k = clamp(Math.hypot(B.dx, B.dy) / 90, 0.15, 1);
-  const r = W.kind === 'lob' || W.kind === 'barrage' ? W.range * k : W.range;
-  return { x:me.x + Math.sin(a) * r, z:me.z + Math.cos(a) * r, a };
-}
-// tap: aim at the nearest enemy we can see (in range first), else straight ahead
+// tap: the nearest enemy we can see, preferring the ones in front of the camera
 export function autoTarget(sup){
   const me = G.me, W = sup ? me.H.super : me.H.attack;
-  let best = null, bd = 1e9;
+  const lob = W.kind === 'lob' || W.kind === 'barrage' || W.kind === 'beam';
+  let best = null, bs = 1e9;
   for(const o of G.fighters){
-    if(!o.alive || o.team === me.team || !visibleTo(me.team, o)) continue;
+    if(!o.alive || o.team === me.team || !canSee(me, o)) continue;
     const d = Math.hypot(o.x - me.x, o.z - me.z);
-    const lob = W.kind === 'lob' || W.kind === 'barrage' || W.kind === 'beam';
-    const score = d + (d > W.range ? 20 : 0) + (!lob && segHit(me.x, me.z, o.x, o.z) >= 0 ? 8 : 0);
-    if(score < bd){ bd = score; best = o; }
+    if(d > W.range * 1.15) continue;
+    const off = Math.abs(angDiff(CAM.yaw, Math.atan2(o.x - me.x, o.z - me.z)));
+    const blocked = !lob && segHit(me.x, me.z, o.x, o.z) >= 0;
+    const score = d + off * 4 + (blocked ? 10 : 0);
+    if(score < bs){ bs = score; best = o; }
   }
-  if(best && Math.hypot(best.x - me.x, best.z - me.z) < W.range * 1.25){
-    const d = Math.hypot(best.x - me.x, best.z - me.z), sp = W.speed || 30, tl = W.kind === 'lob' ? W.flight * 0.8 : d / sp;
-    return { x:best.x + best.vx * tl * 0.7, z:best.z + best.vz * tl * 0.7 };
+  if(!best) return null;
+  const d = Math.hypot(best.x - me.x, best.z - me.z), tl = W.kind === 'lob' || W.kind === 'barrage' ? W.flight * 0.8 : d / (W.speed || 40);
+  return { x:best.x + best.vx * tl * 0.7, z:best.z + best.vz * tl * 0.7, foe:best };
+}
+// where a weapon goes when fired at the crosshair: lobs land where the crosshair meets the ground
+function aimFor(me, sup){
+  const W = sup ? me.H.super : me.H.attack;
+  if(W.kind === 'lob' || W.kind === 'barrage'){
+    const a = Math.atan2(AIM.gx - me.x, AIM.gz - me.z);
+    const d = AIM.groundHit ? clamp(Math.hypot(AIM.gx - me.x, AIM.gz - me.z), 1.5, W.range) : W.range;
+    return { x:me.x + Math.sin(a) * d, z:me.z + Math.cos(a) * d };
   }
-  const a = me.aim;
-  return { x:me.x + Math.sin(a) * W.range * 0.8, z:me.z + Math.cos(a) * W.range * 0.8 };
+  return { x:AIM.x, z:AIM.z };
 }
 
-// ---------------- per-frame: turn input into the hero's intent ----------------
-const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -SHOT_Y * 0.0), hitP = new THREE.Vector3();
+// ---------------- the crosshair ray ----------------
+const camFwd = new THREE.Vector3();
+function castAim(me){
+  const o = camera.position, d = camFwd;
+  // the ground under the crosshair (lobs) — far away when looking up
+  AIM.groundHit = d.y < -0.01;
+  const tg = AIM.groundHit ? (o.y - 0.05) / -d.y : 40;
+  AIM.gx = o.x + d.x * Math.min(tg, 40); AIM.gz = o.z + d.z * Math.min(tg, 40);
+  // first wall, rock or ground along the ray
+  let t = Math.min(tg, 40);
+  for(let s = 0.6; s < t; s += 0.2){
+    const x = o.x + d.x * s, y = o.y + d.y * s, z = o.z + d.z * s;
+    if(y < tileHeight(tileAtXZ(x, z))){ t = s; break; }
+  }
+  // enemies on the ray (vertical cylinders)
+  AIM.foe = null;
+  const dl = Math.hypot(d.x, d.z) || 1e-6;
+  for(const f of G.fighters){
+    if(!f.alive || f.team === me.team || !f.seen) continue;
+    const px = f.x - o.x, pz = f.z - o.z, along = (px * d.x + pz * d.z) / (dl * dl);
+    if(along <= 0 || along >= t) continue;
+    const cx = o.x + d.x * along - f.x, cz = o.z + d.z * along - f.z, y = o.y + d.y * along;
+    if(cx * cx + cz * cz < (f.H.rad + 0.15) ** 2 && y > -0.2 && y < f.H.height + (f.H.hover || 0) + 0.3){ t = along; AIM.foe = f; }
+  }
+  AIM.x = o.x + d.x * t; AIM.y = o.y + d.y * t; AIM.z = o.z + d.z * t;
+  // a point right next to the hero gives no direction: shoot along the camera instead
+  if(Math.hypot(AIM.x - me.x, AIM.z - me.z) < 1.2){ AIM.x = me.x + Math.sin(CAM.yaw) * 8; AIM.z = me.z + Math.cos(CAM.yaw) * 8; }
+  const W = me.H.attack;
+  AIM.inRange = !!AIM.foe && Math.hypot(AIM.foe.x - me.x, AIM.foe.z - me.z) < W.range + 0.5;
+}
+
+// ---------------- per-frame: input → the hero's intent ----------------
 export function playerInput(dt){
   const me = G.me; if(!me) return;
   const inp = me.inp;
-  // movement relative to the camera
   let fx = 0, fz = 0;
-  if(T.move){ fx = -T.move.dy; fz = T.move.dx; const l = Math.hypot(fx, fz); if(l > 1){ fx /= l; fz /= l; } }
-  else { fx = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0); fz = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0); const l = Math.hypot(fx, fz); if(l > 1){ fx /= l; fz /= l; } }
+  if(T.move){ fx = -T.move.dy; fz = T.move.dx; }
+  else { fx = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0); fz = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0); }
+  const l = Math.hypot(fx, fz); if(l > 1){ fx /= l; fz /= l; }
   const sy = Math.sin(CAM.yaw), cy = Math.cos(CAM.yaw);
   // camera forward is (sin yaw, cos yaw); right is (-cos yaw, sin yaw)
   inp.mx = sy * fx - cy * fz; inp.mz = cy * fx + sy * fz;
-  // phones: the camera slowly swings behind the direction you run
-  if(TOUCH && T.move && Math.hypot(fx, fz) > 0.5){
-    CAM.autoT -= dt;
-    const mv = Math.atan2(inp.mx, inp.mz), d = angDiff(CAM.yaw, mv);
-    if(CAM.autoT <= 0 && Math.abs(d) < 1.9) CAM.yaw += d * Math.min(1, dt * 1.1);
-  }
-  // aim point
-  let tx, tz;
-  if(TOUCH){
-    const B = T.sup || T.atk;
-    if(B && B.manual){ const p = manualTarget(B === T.sup, B); tx = p.x; tz = p.z; }
-    else if(me.touchAim && me.atkT < 0.6){ tx = me.touchAim.x; tz = me.touchAim.z; }
-    else { tx = me.x + Math.sin(CAM.yaw) * CAM.look; tz = me.z + Math.cos(CAM.yaw) * CAM.look; if(Math.hypot(inp.mx, inp.mz) > 0.3){ const a = Math.atan2(inp.mx, inp.mz); tx = me.x + Math.sin(a) * 5; tz = me.z + Math.cos(a) * 5; } }
-  } else if(locked){
-    tx = me.x + Math.sin(CAM.yaw) * CAM.look; tz = me.z + Math.cos(CAM.yaw) * CAM.look;
-  } else {
-    // free cursor: aim where the mouse points on the ground
-    ndc.set(mouse.x / innerWidth * 2 - 1, -(mouse.y / innerHeight) * 2 + 1);
-    ray.setFromCamera(ndc, camera);
-    plane.constant = -SHOT_Y * 0.5;
-    if(ray.ray.intersectPlane(plane, hitP)){ tx = hitP.x; tz = hitP.z; } else { tx = me.x + Math.sin(CAM.yaw) * 6; tz = me.z + Math.cos(CAM.yaw) * 6; }
-  }
-  inp.tx = inp.tx || tx; inp.tz = inp.tz || tz;
-  if(!inp.fire && !inp.sup){ inp.tx = tx; inp.tz = tz; }
-  inp.aim = Math.atan2(tx - me.x, tz - me.z);
-  me.aiming = !TOUCH || !!(T.atk && T.atk.manual) || !!(T.sup && T.sup.manual);
+  // a tap-aimed shot swings the camera toward its target
+  if(CAM.turnTo !== null){ const d = angDiff(CAM.yaw, CAM.turnTo); CAM.yaw += d * Math.min(1, dt * 8); if(Math.abs(d) < 0.02) CAM.turnTo = null; }
+  castAim(me);
+  if(!inp.locked){ const p = aimFor(me, false); inp.tx = p.x; inp.tz = p.z; }
+  inp.locked = false;
+  inp.aim = Math.atan2(inp.tx - me.x, inp.tz - me.z);
+  me.aiming = true;
   if(!TOUCH){
-    if(mouse.l && canAttack(me)) inp.fire = true;
-    if(me.wantSup){ me.wantSup = false; if(me.charge >= 1) inp.sup = true; }
+    if(mouse.l && canAttack(me)){ const p = aimFor(me, false); inp.tx = p.x; inp.tz = p.z; inp.fire = true; }
+    if(me.wantSup){ me.wantSup = false; if(me.charge >= 1){ const p = aimFor(me, true); inp.tx = p.x; inp.tz = p.z; inp.sup = true; } }
   }
 }
 
-// ---------------- follow camera ----------------
-const look = new THREE.Vector3();
+// ---------------- over-the-shoulder camera ----------------
+const target = new THREE.Vector3();
 export function updateCamera(dt){
   const me = G.me; if(!me) return;
-  const k = 1 - Math.exp(-dt * 10);
+  const k = 1 - Math.exp(-dt * 14);
   CAM.x = lerp(CAM.x, me.x, k); CAM.z = lerp(CAM.z, me.z, k);
-  const sy = Math.sin(CAM.yaw), cy = Math.cos(CAM.yaw);
-  const far = (CAM.look - 2.5) / 13.5;
-  const dist = CAM.dist + far * 0.8, h = CAM.height - far * 0.9;
-  let px = CAM.x - sy * dist, pz = CAM.z - cy * dist, py = h;
-  // behind the outer fence: climb so the fence doesn't hide the hero
-  const out = Math.max(Math.abs(px) - A.hx, Math.abs(pz) - A.hz, 0);
-  py += out * 0.55;
-  if(G.shake > 0){ const s = G.shake * 0.25; px += (Math.random() - 0.5) * s; py += (Math.random() - 0.5) * s; pz += (Math.random() - 0.5) * s; G.shake = Math.max(0, G.shake - dt * 2.2); }
-  camera.position.set(px, py, pz);
-  look.set(CAM.x + sy * CAM.look * 0.55, 0.9, CAM.z + cy * CAM.look * 0.55);
-  camera.lookAt(look);
-}
-// overview camera for the menu and the start of a match
-export function orbitCamera(t, focus){
-  const a = t * 0.06 + 0.6;
-  const fx = focus ? focus.x : 0, fz = focus ? focus.z : 0;
-  camera.position.set(fx + Math.sin(a) * 26, 22, fz + Math.cos(a) * 26);
-  camera.lookAt(fx, 0, fz);
+  const sy = Math.sin(CAM.yaw), cy = Math.cos(CAM.yaw), cp = Math.cos(CAM.pitch), sp = Math.sin(CAM.pitch);
+  camFwd.set(sy * cp, sp, cy * cp);
+  const rx = -cy, rz = sy;                                    // right of the camera
+  const px = CAM.x + rx * CAM.shoulder * 0.4, pz = CAM.z + rz * CAM.shoulder * 0.4, py = CAM.pivotH;
+  // wanted spot: behind and a little to the right; pull in when a hedge is in the way
+  let dist = CAM.dist;
+  const wx = px - camFwd.x * dist + rx * CAM.shoulder, wz = pz - camFwd.z * dist + rz * CAM.shoulder;
+  const hit = segHit(px, pz, wx, wz, blocksSight);
+  let cx = wx, cz = wz, cyy = py - camFwd.y * dist + 0.25;
+  if(hit >= 0 && cyy < HEDGE_H + 0.2){ const kk = Math.max(0.15, hit - 0.08); cx = px + (wx - px) * kk; cz = pz + (wz - pz) * kk; cyy = py + (cyy - py) * kk; }
+  cyy = Math.max(0.35, cyy);
+  if(G.shake > 0){ const s = G.shake * 0.12; cx += (Math.random() - 0.5) * s; cyy += (Math.random() - 0.5) * s; cz += (Math.random() - 0.5) * s; G.shake = Math.max(0, G.shake - dt * 2.5); }
+  camera.position.set(cx, cyy, cz);
+  target.set(cx + camFwd.x * 10, cyy + camFwd.y * 10, cz + camFwd.z * 10);
+  camera.lookAt(target);
 }
 
-// ---------------- aim guides on the ground ----------------
+// ---------------- the lob arc: dots along the flight and a ring where the bomb lands ----------------
 const guide = new THREE.Group(); guide.visible = false; scene.add(guide);
-const gMat = new THREE.MeshBasicMaterial({ color:'#FFFFFF', transparent:true, opacity:0.22, depthWrite:false });
-const gSup = new THREE.MeshBasicMaterial({ color:'#FFD23F', transparent:true, opacity:0.3, depthWrite:false });
-const shapes = {};
-function shape(kind, W){
-  const key = kind + W.range + (W.spread || 0) + (W.radius || 0);
-  if(shapes[key]) return shapes[key];
-  let g;
-  if(kind === 'fan'){ g = new THREE.CircleGeometry(W.range, 24, -Math.PI / 2 - W.spread / 2 - 0.04, W.spread + 0.08); g.rotateX(-Math.PI / 2); }
-  else if(kind === 'needle' || kind === 'beam'){ const w = kind === 'beam' ? W.width : 0.36; g = new THREE.PlaneGeometry(w, W.range); g.rotateX(-Math.PI / 2); g.translate(0, 0, W.range / 2); }
-  else { g = new THREE.RingGeometry(W.radius * 0.86, W.radius, 36); g.rotateX(-Math.PI / 2); }
-  return shapes[key] = g;
-}
-const gMesh = new THREE.Mesh(new THREE.BufferGeometry(), gMat); gMesh.renderOrder = 3; guide.add(gMesh);
-const gFill = new THREE.Mesh(new THREE.CircleGeometry(1, 32).rotateX(-Math.PI / 2), gMat); gFill.renderOrder = 3; guide.add(gFill);
-const dots = []; for(let i = 0; i < 9; i++){ const d = new THREE.Mesh(new THREE.CircleGeometry(0.07, 10).rotateX(-Math.PI / 2), gMat); d.renderOrder = 3; guide.add(d); dots.push(d); }
+const gMat = new THREE.MeshBasicMaterial({ color:'#FFFFFF', transparent:true, opacity:0.75, depthWrite:false, depthTest:false });
+const gSup = new THREE.MeshBasicMaterial({ color:'#FFD23F', transparent:true, opacity:0.85, depthWrite:false, depthTest:false });
+const ringG = new THREE.RingGeometry(0.86, 1, 40); ringG.rotateX(-Math.PI / 2);
+const gRing = new THREE.Mesh(ringG, gMat); gRing.renderOrder = 6; guide.add(gRing);
+const dotG = new THREE.SphereGeometry(0.06, 8, 6);
+const dots = []; for(let i = 0; i < 16; i++){ const d = new THREE.Mesh(dotG, gMat); d.renderOrder = 6; guide.add(d); dots.push(d); }
 export function updateGuide(){
   const me = G.me;
-  const touchAiming = TOUCH && ((T.atk && T.atk.manual) || (T.sup && T.sup.manual));
-  const show = me && me.alive && G.state === 'play' && (!TOUCH || touchAiming);
-  guide.visible = !!show; if(!show) return;
-  const sup = TOUCH && !!T.sup;
-  const W = sup ? me.H.super : me.H.attack, kind = W.kind === 'barrage' ? 'lob' : W.kind;
-  const mat = sup ? gSup : gMat;
-  mat.opacity = TOUCH ? 0.35 : canAttack(me) ? 0.22 : 0.1;
-  gMesh.material = gFill.material = mat; dots.forEach(d => d.material = mat);
-  gMesh.geometry = shape(kind, W);
-  const a = me.inp.aim;
-  const lob = kind === 'lob';
-  gFill.visible = lob; dots.forEach(d => d.visible = lob);
-  if(lob){
-    const d = clamp(Math.hypot(me.inp.tx - me.x, me.inp.tz - me.z), 1.5, W.range);
-    const x = me.x + Math.sin(a) * d, z = me.z + Math.cos(a) * d;
-    gMesh.position.set(x, 0.06, z); gMesh.rotation.y = 0;
-    gFill.position.set(x, 0.055, z); gFill.scale.setScalar(W.radius * 0.86);
-    dots.forEach((dt, i) => { const k = (i + 1) / (dots.length + 1); dt.position.set(lerp(me.x, x, k), 0.06, lerp(me.z, z, k)); });
-  } else {
-    gMesh.position.set(me.x, 0.06, me.z); gMesh.rotation.y = a;
-  }
+  const show = me && me.alive && G.state === 'play' && (!TOUCH || T.atk || T.sup);
+  const sup = TOUCH ? !!T.sup : me && me.charge >= 1 && keys.KeyE;
+  const W = me && (sup ? me.H.super : me.H.attack);
+  const lob = W && (W.kind === 'lob' || W.kind === 'barrage');
+  guide.visible = !!(show && lob); if(!guide.visible) return;
+  const mat = sup ? gSup : gMat; mat.opacity = canAttack(me) || sup ? 0.8 : 0.3;
+  gRing.material = mat; dots.forEach(d => d.material = mat);
+  const p = aimFor(me, sup), d = Math.hypot(p.x - me.x, p.z - me.z), h = 3.2 + d * 0.2;
+  gRing.position.set(p.x, 0.07, p.z); gRing.scale.setScalar(W.radius);
+  dots.forEach((dt, i) => { const k = (i + 1) / (dots.length + 1); dt.position.set(lerp(me.x, p.x, k), lerp(1.0, 0.15, k) + Math.sin(k * Math.PI) * h, lerp(me.z, p.z, k)); });
 }
+export const lobHeight = d => 3.2 + d * 0.2;

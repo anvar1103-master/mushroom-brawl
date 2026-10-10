@@ -1,7 +1,7 @@
 // Bot brains for «Споры»: collect spores, fight at their weapon's best range, protect carriers, run home when hurt.
 import { G } from './state.js';
-import { A, findPath, losClear, walkClear, inGrass, tileAtXZ } from './arena.js';
-import { visibleTo, canAttack } from './combat.js';
+import { A, findPath, losClear, walkClear, inGrass, tileAtXZ, sightClear } from './arena.js';
+import { canSee, canAttack } from './combat.js';
 import { rand, clamp, angDiff, TAU } from './util.js';
 
 export const SKILL = { easy:{ err:0.22, react:0.6, lead:0.4, dodge:0.2 }, normal:{ err:0.11, react:0.35, lead:0.75, dodge:0.5 }, hard:{ err:0.05, react:0.18, lead:1, dodge:0.85 } };
@@ -36,7 +36,7 @@ export function botThink(f, dt){
   let best = null, bestScore = -1e9;
   for(const o of G.fighters){
     if(!o.alive || o.team === f.team) continue;
-    if(visibleTo(f.team, o)){ B.mem.set(o.id, { x:o.x, z:o.z, t:now, o }); }
+    if(canSee(f, o)){ B.mem.set(o.id, { x:o.x, z:o.z, t:now, o }); }
     else continue;
     const d = dist(f, o);
     const score = -d + (o.gems || 0) * 1.2 + (1 - o.hp / o.max) * 4 + (o === B.target ? 2 : 0);
@@ -141,7 +141,7 @@ export function botThink(f, dt){
     for(const m of B.mem.values()){
       if(!m.o.alive || now - m.t > 2.5 || now - m.t < 0.4) continue;
       const d = Math.hypot(m.x - f.x, m.z - f.z);
-      if(d < H.attack.range && inGrass(m.x, m.z)){ inp.aim = Math.atan2(m.x - f.x, m.z - f.z); inp.tx = m.x; inp.tz = m.z; inp.fire = true; break; }
+      if(d < H.attack.range && (inGrass(m.x, m.z) || !sightClear(f.x, f.z, m.x, m.z))){ inp.aim = Math.atan2(m.x - f.x, m.z - f.z); inp.tx = m.x; inp.tz = m.z; inp.fire = true; break; }
     }
   }
 }
