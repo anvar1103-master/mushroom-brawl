@@ -1,7 +1,7 @@
 // Bot brains for «Споры»: collect spores, fight at their weapon's best range, protect carriers, run home when hurt.
 import { G } from './state.js';
 import { A, findPath, losClear, walkClear, inGrass, tileAtXZ, sightClear, segHit, colOf, rowOf } from './arena.js';
-import { fogR, fogAhead } from './royale.js';
+import { fogR, fogAhead, ROYALE } from './royale.js';
 import { canSee, canAttack } from './combat.js';
 import { rand, clamp, angDiff, TAU } from './util.js';
 
@@ -104,11 +104,12 @@ function royaleGoal(f, B, T, dt){
   B.thinkT -= dt;
   if(B.thinkT <= 0){
     B.thinkT = rand(0.25, 0.4);
-    const hurt = f.hp < f.max * 0.38;
+    const hurt = f.hp < f.max * 0.38, calm = G.match.t < ROYALE.wait && f.regenT > 1.5;
     B.crate = null; B.pk = null;
     if(rc > Math.min(R, soon) - 2.5) B.mode = 'zone';
     else if(hurt && T && dist(f, T) < 7 && f.hp < T.hp) B.mode = 'retreat';
-    else if(T && dist(f, T) < H.attack.range * 1.35) B.mode = 'fight';
+    // the first seconds are for looting, as long as nobody is right in our face or shooting at us
+    else if(T && dist(f, T) < H.attack.range * (calm ? 0.7 : 1.35)) B.mode = 'fight';
     else {
       // the nearest power spore or crate that lies inside the safe area
       let pk = null, pd = 13;
@@ -119,7 +120,7 @@ function royaleGoal(f, B, T, dt){
         for(const k of A.crates){ if(!k.alive) continue; const d = Math.hypot(k.x - f.x, k.z - f.z); if(d < kd && Math.hypot(k.x, k.z) < soon - 1.5){ kd = d; kc = k; } }
         let seen = null; for(const m of B.mem.values()) if(m.o.alive && now - m.t < 5 && (!seen || m.t > seen.t)) seen = m;
         if(kc && !(seen && f.hp > f.max * 0.7 && rand() < 0.3)){ B.mode = 'crate'; B.crate = kc; }
-        else if(seen && f.hp > f.max * 0.6){ B.mode = 'hunt'; B.huntX = seen.x; B.huntZ = seen.z; }
+        else if(seen && f.hp > f.max * 0.6 && !calm){ B.mode = 'hunt'; B.huntX = seen.x; B.huntZ = seen.z; }
         else B.mode = 'roam';
       }
     }
