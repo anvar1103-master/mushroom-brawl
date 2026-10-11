@@ -41,10 +41,12 @@ function build(def){
 
 // «Последний гриб»: a hedge maze for ten fighters. One quarter is generated (a maze with extra openings, grass,
 // crates in dead ends) and turned four times around the middle, so every corner plays the same.
+// The maze is laid out on a coarse grid and then widened: every passage cell becomes 2×2 tiles (3.2 m), walls stay one
+// tile thick, so the corridors leave room for the camera behind the hero.
 function buildMaze(seed){
   let st = seed >>> 0;
   const rnd = () => { st = (st + 0x6D2B79F5) >>> 0; let t = st; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  const h = 17, N = h * 2 - 1;
+  const h = 12, N = h * 2 - 1;
   const q = Array.from({ length:h }, () => Array(h).fill('#'));
   const inQ = (r, c) => r >= 0 && c >= 0 && r < h && c < h;
   // 1) a perfect maze over the even cells
@@ -57,16 +59,16 @@ function buildMaze(seed){
     q[r + dr / 2][c + dc / 2] = '.'; q[a][b] = '.'; seen.add(a + ',' + b); stack.push([a, b]);
   }
   // 2) knock out extra walls so there are loops and flanks, and lone pillars in open spots
-  for(let r = 0; r < h; r++) for(let c = 0; c < h; c++) if(q[r][c] === '#' && (r % 2) !== (c % 2) && rnd() < 0.2) q[r][c] = '.';
+  for(let r = 0; r < h; r++) for(let c = 0; c < h; c++) if(q[r][c] === '#' && (r % 2) !== (c % 2) && rnd() < 0.12) q[r][c] = '.';
   for(let r = 1; r < h; r += 2) for(let c = 1; c < h; c += 2){
     const open = [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dr, dc]) => !inQ(r + dr, c + dc) || q[r + dr][c + dc] === '.');
-    if(open && rnd() < 0.35) q[r][c] = '.';
+    if(open && rnd() < 0.15) q[r][c] = '.';
   }
   // 3) an open clearing in the middle and room around the three spawns of this quarter
-  for(let r = 0; r < h; r++) for(let c = 0; c < h; c++) if(Math.max(h - 1 - r, h - 1 - c) <= 3) q[r][c] = '.';
-  const spawns = [[1, 1], [1, 11], [11, 1]];
+  for(let r = 0; r < h; r++) for(let c = 0; c < h; c++) if(Math.max(h - 1 - r, h - 1 - c) <= 2) q[r][c] = '.';
+  const spawns = [[1, 1], [1, 8], [8, 1]];
   for(const [sr, sc] of spawns) for(let r = sr - 1; r <= sr + 1; r++) for(let c = sc - 1; c <= sc + 1; c++) if(inQ(r, c)) q[r][c] = '.';
-  const near = (r, c, d) => spawns.some(([a, b]) => Math.abs(a - r) <= d && Math.abs(b - c) <= d) || Math.max(h - 1 - r, h - 1 - c) <= 4;
+  const near = (r, c, d) => spawns.some(([a, b]) => Math.abs(a - r) <= d && Math.abs(b - c) <= d) || Math.max(h - 1 - r, h - 1 - c) <= 3;
   // 4) tall grass in a few clumps
   for(let k = 0; k < 9; k++){
     let r = Math.floor(rnd() * h), c = Math.floor(rnd() * h);
@@ -79,9 +81,9 @@ function buildMaze(seed){
   let crates = 0;
   const wallsAt = (r, c) => [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dr, dc]) => inQ(r + dr, c + dc) && q[r + dr][c + dc] === '#').length;
   // dead ends first (a crate there never blocks a route), then a few in corridor corners
-  for(const need of [3, 2]) for(let r = 0; r < h - 1 && crates < 11; r++) for(let c = 0; c < h - 1 && crates < 11; c++){
+  for(const need of [3, 2]) for(let r = 0; r < h - 1 && crates < 10; r++) for(let c = 0; c < h - 1 && crates < 10; c++){
     if(q[r][c] !== '.' || near(r, c, 2)) continue;
-    if(wallsAt(r, c) >= need && rnd() < (need === 3 ? 0.8 : 0.18)){ q[r][c] = 'C'; crates++; }
+    if(wallsAt(r, c) >= need && rnd() < (need === 3 ? 0.9 : 0.4)){ q[r][c] = 'C'; crates++; }
   }
   q[h - 4][h - 3] = 'C'; q[h - 3][h - 4] = 'C'; q[h - 3][h - 3] = 'R';
   for(let r = 0; r < h; r++) for(let c = 0; c < h; c++) if(q[r][c] === '.' && !near(r, c, 2) && rnd() < 0.025) q[r][c] = 'R';
@@ -113,6 +115,18 @@ function buildMaze(seed){
       }
     }
   }
-  const rows = full.map(r => r.join(''));
-  return { id:'maze', name:'Лесной лабиринт', desc:'Узкие проходы между кустами, тайники с силой и поляна в центре.', rows, W:N, H:N, mode:'br' };
+  // 8) widen: even (passage) lines become two tiles, odd (wall) lines one; crates, rocks and spawns sit in one tile
+  //    of their block and the other three stay open floor
+  const span = i => i % 2 ? 1 : 2;
+  const rows = [];
+  for(let r = 0; r < N; r++) for(let rr = 0; rr < span(r); rr++){
+    let line = '';
+    for(let c = 0; c < N; c++) for(let cc = 0; cc < span(c); cc++){
+      const ch = full[r][c], first = rr === 0 && cc === 0;
+      line += 'CRs'.includes(ch) && !first ? '.' : ch;
+    }
+    rows.push(line);
+  }
+  const W = rows[0].length;
+  return { id:'maze', name:'Лесной лабиринт', desc:'Узкие проходы между кустами, тайники с силой и поляна в центре.', rows, W, H:rows.length, mode:'br' };
 }

@@ -43,7 +43,7 @@ export function spawn(f, at){
   f.x = p.x; f.z = p.z; f.vx = f.vz = f.kx = f.kz = 0;
   f.alive = true; f.hp = f.max; f.ammo = AMMO; f.cdT = 0; f.deadT = 0; f.spawnT = 0; f.shieldT = SPAWN_SHIELD; f.regenT = 0;
   // face the enemy side (or the middle of the map when everyone is on their own)
-  f.aim = A.spawns[f.team] ? (f.team === 0 ? Math.PI : 0) : openYaw(f.x, f.z); f.V.yaw = f.aim; f.atkT = f.supT = 9; f.spot = {}; f.pendingBeam = null; f.stunT = 0; f.gems = 0;
+  f.aim = A.spawns[f.team] ? (f.team === 0 ? Math.PI : 0) : openYaw(f.x, f.z); f.V.yaw = f.aim; f.inp.aim = f.aim; f.atkT = f.supT = 9; f.spot = {}; f.pendingBeam = null; f.stunT = 0; f.gems = 0;
   f.V.root.visible = true; f.V.root.scale.setScalar(1);
   setTeamLook(f.V, lookFor(f));
   kick.spawn(f.V);
@@ -126,7 +126,8 @@ export function stepFighter(f, dt){
   f.inGrass = g;
   if(Math.hypot(f.vx, f.vz) > 2 && Math.random() < dt * 4 && !f.H.hover && !g) dust(f.x, f.z, 1);
   // aim + attacks
-  if(!frozen || f.pendingBeam){ if(!f.pendingBeam) f.aim = inp.aim; }
+  // the hero turns with the crosshair from the very first second, during the countdown too
+  if(!f.pendingBeam && (!frozen || (G.state === 'countdown' && f.stunT <= 0))) f.aim = inp.aim;
   if(f.pendingBeam){ f.pendingBeam.t -= dt; if(f.pendingBeam.t <= 0) fireBeam(f); }
   if(!frozen){
     if(inp.sup && f.charge >= 1) doSuper(f, inp.tx, inp.tz);

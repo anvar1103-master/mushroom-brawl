@@ -175,8 +175,25 @@ function leafTex(){
     for(let i = 0; i < 160; i++){ const x = rand(0, w), y = rand(0, h); g.beginPath(); g.ellipse(x, y, 3, 1.6, rand(0, TAU), 0, TAU); g.fill(); }
   }, { repeat:true });
 }
-function triplanar(mat, scale){
+// see-through: hedges between the camera and your hero are dithered away in a soft tube, so the camera can stay
+// back in narrow corridors and you still see your hero and what's around them
+const SEE_THROUGH = `
+  if(uMe.z > 0.0){
+    vec3 P = vec3(uMe.x, 1.0, uMe.y), C = cameraPosition, D = P - C;
+    float t = dot(vWP - C, D) / max(dot(D, D), 1e-4);
+    if(t > 0.0 && t < 1.08){
+      float r = mix(0.7, 1.7, clamp(t, 0.0, 1.0)), d = length(vWP - (C + D * t));
+      float keep = mix(0.14, 1.0, smoothstep(r * 0.55, r, d));
+      float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+      if(ign > keep) discard;
+    }
+  }`;
+function triplanar(mat, scale, see){
   mat.onBeforeCompile = sh => {
+    if(see){
+      sh.uniforms.uMe = U.me;
+      sh.fragmentShader = 'uniform vec3 uMe;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n' + SEE_THROUGH);
+    }
     sh.vertexShader = 'varying vec3 vWP; varying vec3 vWN;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n vWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vWN = normalize(mat3(modelMatrix) * objectNormal);');
     sh.fragmentShader = 'varying vec3 vWP; varying vec3 vWN;\n' + sh.fragmentShader.replace('#include <map_fragment>', `
       ${LOW ? `vec3 an = abs(vWN);   // phones: one texture read along the main axis instead of three
@@ -185,7 +202,7 @@ function triplanar(mat, scale){
       vec4 tx = texture2D(map, vWP.zy * ${scale.toFixed(3)}), ty = texture2D(map, vWP.xz * ${scale.toFixed(3)}), tz = texture2D(map, vWP.xy * ${scale.toFixed(3)});
       diffuseColor *= tx * bw.x + ty * bw.y + tz * bw.z;`}`);
   };
-  mat.customProgramCacheKey = () => 'tri' + scale;
+  mat.customProgramCacheKey = () => 'tri' + scale + (see ? 'see' : '');
   return mat;
 }
 
@@ -330,7 +347,7 @@ function buildGround(){
 }
 
 function hedgeMat(){
-  if(!A.shared.hedge){ A.shared.hedge = triplanar(stdMat({ map:leafTex(), vertexColors:true, roughness:0.85, color:'#E8FFD8' }), 0.55); }
+  if(!A.shared.hedge){ A.shared.hedge = triplanar(stdMat({ map:leafTex(), vertexColors:true, roughness:0.85, color:'#E8FFD8' }), 0.55, true); }
   return A.shared.hedge;
 }
 export const HEDGE_H = 2.6;
