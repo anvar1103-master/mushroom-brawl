@@ -171,6 +171,14 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .board svg{width:26px;height:26px;vertical-align:middle}
 .board .mvp{font:900 11px/1 var(--font-display);color:#3A2400;background:var(--sun);padding:3px 6px;border-radius:6px;margin-left:6px}
 .btns{display:flex;gap:10px} .btns>*{flex:1}
+.settings{text-align:left}.settings h2{text-align:center}
+.settings .row{min-height:40px}
+.settings .note{color:var(--muted);font:700 12px/1.35 var(--font-body);margin-top:-4px}
+.slide{display:flex;align-items:center;gap:10px}
+.slide input{width:150px;accent-color:var(--lime)}
+.slide b{min-width:32px;text-align:right;font:900 15px/1 var(--font-display);font-variant-numeric:tabular-nums}
+.fps{position:fixed;left:calc(64px + var(--safe-l));top:calc(18px + var(--safe-t));z-index:20;padding:5px 9px;border-radius:9px;background:rgba(0,0,0,.55);font:900 13px/1 var(--font-display);color:#9BFF8A;font-variant-numeric:tabular-nums;pointer-events:none}
+.fps.mid{color:#FFD23F}.fps.bad{color:#FF6B6B}
 
 @media (max-width:900px){
   .menu{grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr;overflow:auto}

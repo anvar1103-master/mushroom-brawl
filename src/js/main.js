@@ -1,7 +1,7 @@
 // Boot, match flow and the main loop.
 import * as THREE from 'three';
 import { $, TOUCH, store, shuffle, esc } from './util.js';
-import { renderer, scene, camera, resize, applyQuality, render, perfWatch, skyTick, buildEnv, bakeSky, sky, Q } from './engine.js';
+import { renderer, scene, camera, resize, applyQuality, setQuality, render, perfWatch, skyTick, buildEnv, bakeSky, sky, Q } from './engine.js';
 import { loadNature } from './assets.js';
 import { buildArena, U, A, segHit } from './arena.js';
 import { applyLang, tr, L } from './i18n.js';
@@ -52,13 +52,30 @@ function setPreview(id){
 }
 function renderMenu(){
   renderHeroes(MENU.hero, id => { MENU.hero = id; store.set('hero', id); sfx('select'); renderMenu(); setPreview(id); });
-  for(const [id, val] of [['m-diff', MENU.diff], ['m-q', Q.level]]) for(const b of $(id).querySelectorAll('button')) b.classList.toggle('sel', b.dataset.v === val);
-  for(const b of $('m-snd').querySelectorAll('button')){ const on = b.dataset.v === 'sfx' ? AU.sfxOn : AU.musicOn; b.classList.toggle('sel', on); b.classList.toggle('off', !on); }
+  for(const b of $('m-diff').querySelectorAll('button')) b.classList.toggle('sel', b.dataset.v === MENU.diff);
   $('howto').textContent = tr(TOUCH ? 'Левый палец — бег, правый — поворот камеры. Кнопка атаки: короткое нажатие — автоприцел, с протяжкой — целишься сам. Звезда — супер.' : 'WASD — бег, мышь — камера и прицел, ЛКМ — атака, ПКМ или E — супер, Esc — пауза.');
 }
 $('m-diff').onclick = e => { const v = e.target.dataset.v; if(!v) return; MENU.diff = v; store.set('diff', v); sfx('click'); renderMenu(); };
-$('m-q').onclick = e => { const v = e.target.dataset.v; if(!v || v === Q.level) return; applyQuality(v); sfx('click'); setTimeout(() => location.reload(), 120); };
-$('m-snd').onclick = e => { const v = e.target.dataset.v; if(!v) return; unlockAudio(); if(v === 'sfx') setSfx(!AU.sfxOn); else setMusic(!AU.musicOn); sfx('click'); renderMenu(); };
+// ---------------- settings ----------------
+const SET = { fps:store.get('fps', false) };
+function renderSettings(){
+  for(const b of $('s-gfx').querySelectorAll('button')) b.classList.toggle('sel', b.dataset.v === Q.level);
+  for(const b of $('s-fps').querySelectorAll('button')) b.classList.toggle('sel', (b.dataset.v === '1') === SET.fps);
+  for(const b of $('s-snd').querySelectorAll('button')){ const on = b.dataset.v === 'sfx' ? AU.sfxOn : AU.musicOn; b.classList.toggle('sel', on); b.classList.toggle('off', !on); }
+  $('s-sens').value = CAM.sens; $('s-sens-v').textContent = (+CAM.sens).toFixed(2);
+  $('fps').hidden = !SET.fps;
+}
+function openSettings(fromPause){ $('s-gfx-row').hidden = $('s-gfx-note').hidden = !!fromPause; renderSettings(); $('settings').hidden = false; sfx('click'); }
+$('m-set').onclick = () => openSettings(false);
+$('p-set').onclick = () => openSettings(true);
+$('s-close').onclick = () => { $('settings').hidden = true; sfx('click'); };
+$('s-gfx').onclick = e => { const v = e.target.dataset.v; if(!v || v === Q.level) return; setQuality(v); sfx('click'); setTimeout(() => location.reload(), 150); };
+$('s-fps').onclick = e => { const v = e.target.dataset.v; if(v === undefined) return; SET.fps = v === '1'; store.set('fps', SET.fps); sfx('click'); renderSettings(); };
+$('s-snd').onclick = e => { const v = e.target.dataset.v; if(!v) return; unlockAudio(); if(v === 'sfx') setSfx(!AU.sfxOn); else setMusic(!AU.musicOn); sfx('click'); renderSettings(); };
+$('s-sens').oninput = e => { CAM.sens = +e.target.value; store.set('sens', CAM.sens); $('s-sens-v').textContent = CAM.sens.toFixed(2); };
+renderSettings();
+let fpsShown = -1;
+function showFps(){ if(!SET.fps || Q.fps === fpsShown) return; fpsShown = Q.fps; const el = $('fps'); el.textContent = Q.fps + ' FPS'; el.className = 'fps' + (Q.fps < 30 ? ' bad' : Q.fps < 50 ? ' mid' : ''); }
 $('play').onclick = () => { unlockAudio(); sfx('confirm'); startMatch(); };
 function showMenu(){
   G.state = 'menu'; G.paused = false;
@@ -215,6 +232,7 @@ function frame(now){
   if(G.state === 'end' && endT < 1.2) dt *= 0.4;
   if(!G.paused && !YA.adOn) tick(dt);
   perfWatch(raw, G.state === 'play');
+  showFps();
   render();
   requestAnimationFrame(frame);
 }

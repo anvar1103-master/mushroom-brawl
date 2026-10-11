@@ -1,6 +1,6 @@
 // Fighters, movement, attacks, projectiles, damage, supers and visibility (tall grass hides you).
 import * as THREE from 'three';
-import { scene, camera, Q, stdMat } from './engine.js';
+import { scene, camera, Q, stdMat, LOW } from './engine.js';
 import { G, emit, isEnemy } from './state.js';
 import { HEROES, AMMO } from './heroes.js';
 import { makeVisual, animate, kick, setTeamLook } from './anim.js';
@@ -375,7 +375,7 @@ export function updateFighterVisuals(dt, t){
     let op = f.alive && f.inGrass && f.team === meTeam ? 0.55 : 1;
     if(f === G.me && G.state !== 'menu'){ const cd = camera.position.distanceTo(V.root.position) - 0.6; if(cd < 2.2) op = Math.min(op, Math.max(0.15, (cd - 0.6) / 1.6)); }
     const ghost = op < 1;
-    if(V.mat.transparent !== ghost){ V.mat.transparent = ghost; V.mat.depthWrite = !ghost; V.ol.visible = !ghost && Q.level === 'high'; }
+    if(V.mat.transparent !== ghost){ V.mat.transparent = ghost; V.mat.depthWrite = !ghost; V.ol.visible = !ghost && !LOW; }
     V.mat.opacity = op;
     // spawn shield shimmer
     if(f.shieldT > 0) V.mat.userData.u.uTint.value.setScalar(0.12 + Math.sin(t * 20) * 0.08);

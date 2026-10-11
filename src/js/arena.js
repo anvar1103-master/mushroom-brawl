@@ -1,7 +1,7 @@
 // The arena: tile grid, collisions, line of sight, path finding and the 3D dressing around it.
 import * as THREE from 'three';
 import { mergeVertices, mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { scene, canvasTex, fitShadow, stdMat, LOW } from './engine.js';
+import { scene, canvasTex, fitShadow, stdMat, LOW, HIGH } from './engine.js';
 import { NATURE } from './assets.js';
 import { TILE, MAPS } from './maps.js';
 import { rand, pick, seeded, clamp, TAU, TOUCH } from './util.js';
@@ -356,7 +356,7 @@ function buildHedges(){
   geos.forEach(g => g.dispose());
   // a few leafy tufts and flowers on top so the walls read as living bushes
   const tufts = [];
-  for(let r = 0; r < H; r++) for(let c = 0; c < W; c++) if(isH(c, r) && Q.level === 'high' && rand() < 0.3) tufts.push({ x:tileX(c) + rand(-0.4, 0.4), y:HEDGE_H - 0.3, z:tileZ(r) + rand(-0.4, 0.4), rot:rand(0, TAU), s:rand(0.32, 0.42) });
+  for(let r = 0; r < H; r++) for(let c = 0; c < W; c++) if(isH(c, r) && HIGH && rand() < 0.3) tufts.push({ x:tileX(c) + rand(-0.4, 0.4), y:HEDGE_H - 0.3, z:tileZ(r) + rand(-0.4, 0.4), rot:rand(0, TAU), s:rand(0.32, 0.42) });
   instanceModel('Bush_Common', tufts, () => leafMat('#4FA23A'), { cast:false });
 }
 function addBlock(geos, x0, z0, sx, sz, h = HEDGE_H){
@@ -433,7 +433,7 @@ function grassPatchGeo(n){
   return g;
 }
 function buildGrass(){
-  const n = Q.level === 'high' ? 70 : 46;
+  const n = HIGH ? 70 : LOW ? 40 : 56;
   const geos = [grassPatchGeo(n), grassPatchGeo(n), grassPatchGeo(n)];
   const mat = windify(stdMat({ vertexColors:true, roughness:1, side:THREE.DoubleSide, envMapIntensity:0.5 }), 1.6, 0.12, true);
   grassMeshes = [];
@@ -488,33 +488,39 @@ function leafMat2(color){
   return A.shared[key];
 }
 
+// the forest around the arena is two painted bands of tree silhouettes: two draw calls, a few dozen triangles
+function treeBand(seed, dark, light){
+  return canvasTex(2048, 256, (g, w, h) => {
+    seeded(seed, () => {
+      // a tree is a list of shapes picked once, then drawn three times (one texture-width apart) so the band wraps seamlessly
+      const tree = (x, base, s, col) => {
+        const pine = rand() < 0.45, parts = [];
+        if(pine) for(let k = 0; k < 4; k++) parts.push(['t', base - s * (0.35 + k * 0.42), s * (0.75 - k * 0.15)]);
+        else for(let k = 0; k < 5; k++) parts.push(['c', rand(-0.5, 0.5) * s, base - s * rand(0.7, 1.6), s * rand(0.45, 0.7)]);
+        g.fillStyle = col;
+        for(const o of [-w, 0, w]){
+          const X = x + o;
+          for(const p of parts){
+            g.beginPath();
+            if(p[0] === 't'){ g.moveTo(X - p[2], p[1] + s * 0.45); g.lineTo(X, p[1] - s * 0.5); g.lineTo(X + p[2], p[1] + s * 0.45); }
+            else g.arc(X + p[1], p[2], p[3], 0, TAU);
+            g.fill();
+          }
+          g.fillRect(X - s * 0.08, base - s * 0.6, s * 0.16, h);
+        }
+      };
+      for(let x = 0; x < w; x += rand(26, 48)) tree(x, h * 0.92, rand(55, 95), light);
+      for(let x = 0; x < w; x += rand(30, 56)) tree(x, h, rand(48, 80), dark);
+      g.fillStyle = dark; g.fillRect(0, h * 0.86, w, h);
+    });
+  }, { repeat:true });
+}
 function buildOutside(){
-  // a forest ring: trees far enough out that the follow camera never ends up inside one
-  const trees = { CommonTree_3:[], Pine_1:[] }, bushes = [], ferns = [], mush = [], flowers = [];
-  const n = Q.level === 'high' && !TOUCH ? 30 : 18;
-  const out = (x, z, m) => Math.abs(x) > A.hx + m || Math.abs(z) > A.hz + m;
-  for(let i = 0, tries = 0; i < n && tries < 2000; tries++){
-    const a = rand(0, TAU), d = rand(0, 1), x = Math.sin(a) * (A.hx + 9 + d * 16), z = Math.cos(a) * (A.hz + 9 + d * 14);
-    if(!out(x, z, 8.5)) continue;
-    const k = rand() < 0.55 ? 'CommonTree_3' : 'Pine_1';
-    trees[k].push({ x, z, rot:rand(0, TAU), s:rand(0.85, 1.25) * (k === 'Pine_1' ? 1.1 : 1), color:new THREE.Color().setHSL(rand(0.22, 0.32), rand(0.45, 0.65), rand(0.36, 0.48)) }); i++;
+  const R = Math.hypot(A.hx, A.hz);
+  for(const [r, h, seed, dark, light, tint] of [[R + 18, 15, 11, '#2C4A22', '#3E6230', '#FFFFFF'], [R + 34, 22, 23, '#3A4E38', '#4E6448', '#E8E0E0']]){
+    const tex = treeBand(seed, dark, light); tex.repeat.set(4, 1);
+    const g = new THREE.CylinderGeometry(r, r, h, 48, 1, true); g.translate(0, h / 2 - 0.5, 0);
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map:tex, alphaTest:0.5, side:THREE.BackSide, color:tint }));
+    A.group.add(m);
   }
-  for(let i = 0, N = Q.level === 'high' && !TOUCH ? 56 : 34; i < N; i++){
-    const side = Math.floor(rand(0, 4)), t = rand(-1, 1), m = rand(1.8, 7);
-    const x = side < 2 ? t * (A.hx + 4) : (side === 2 ? -1 : 1) * (A.hx + m), z = side < 2 ? (side === 0 ? -1 : 1) * (A.hz + m) : t * (A.hz + 4);
-    const r = rand();
-    if(r < 0.4) bushes.push({ x, z, rot:rand(0, TAU), s:rand(0.7, 1.2), color:new THREE.Color().setHSL(rand(0.22, 0.3), 0.55, rand(0.38, 0.48)) });
-    else if(r < 0.65) ferns.push({ x, z, rot:rand(0, TAU), s:rand(0.18, 0.26) });
-    else if(r < 0.78) mush.push({ x, z, rot:rand(0, TAU), s:rand(0.9, 1.6) });
-    else flowers.push({ x, z, rot:rand(0, TAU), s:rand(0.5, 0.7) });
-  }
-  const bark = stdMat({ map:NATURE.CommonTree_3.parts.find(p => /Bark/.test(p.matName)).map, roughness:0.9 });
-  const leaves = name => windify(stdMat({ map:NATURE[name].parts.find(p => /Lea/.test(p.matName)).map, alphaTest:0.45, side:THREE.DoubleSide, roughness:0.8, color:'#FFFFFF' }), 8, 0.12, false);
-  const shadows = false;
-  for(const k in trees){ const lm = leaves(k); instanceModel(k, trees[k], p => /Bark/.test(p.matName) ? bark : lm, { cast:shadows }); }
-  instanceModel('Bush_Common', bushes, () => windify(stdMat({ map:NATURE.Bush_Common.parts[0].map, alphaTest:0.45, side:THREE.DoubleSide, roughness:0.8 }), 1.6, 0.05, false));
-  instanceModel('Fern_1', ferns, () => leafMat2('#4E9E38'));
-  const mm = stdMat({ map:NATURE.Mushroom_Common.parts[0].map, roughness:0.7 });
-  instanceModel('Mushroom_Common', mush, () => mm);
-  instanceModel('Flower_3_Group', flowers, p => p.matName === 'Flowers' ? flowerMat() : leafMat2('#5DB043'));
 }

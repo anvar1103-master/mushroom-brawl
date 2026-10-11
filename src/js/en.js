@@ -8,6 +8,8 @@ export const EN = {
   'Левый палец — бег, правый — поворот камеры. Кнопка атаки: короткое нажатие — автоприцел, с протяжкой — целишься сам. Звезда — супер.':'Left thumb to run, right thumb to turn the camera. Attack button: a quick tap auto-aims, hold and drag to aim yourself. The star is your super.',
   'WASD — бег, мышь — камера и прицел, ЛКМ — атака, ПКМ или E — супер, Esc — пауза.':'WASD to run, mouse to look and aim, LMB to attack, RMB or E for the super, Esc to pause.',
   'Здоровье':'Health', 'Урон':'Damage', 'Дальность':'Range', 'Скорость':'Speed', 'м':'m',
+  'Настройки':'Settings', 'Средняя':'Medium', 'Чувствительность':'Sensitivity', 'Счётчик FPS':'FPS counter', 'Выкл':'Off', 'Вкл':'On', 'Готово':'Done',
+  'Игра сама снижает качество, если кадров не хватает. При смене графики страница перезагрузится.':'The game lowers the quality by itself when frames run short. Changing graphics reloads the page.',
   // heroes
   'Шляпник':'Capper', 'Бабах':'Kaboom', 'Жалка':'Stinga', 'мухомор':'fly agaric', 'жук-бомбардир':'bombardier beetle', 'оса':'wasp',
   'Дробовик':'Shotgun', 'Метатель':'Thrower', 'Снайпер':'Sniper',

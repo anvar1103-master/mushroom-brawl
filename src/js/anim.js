@@ -13,7 +13,7 @@ const ringTex = (() => {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 })();
 const ringGeo = new THREE.PlaneGeometry(1.25, 1.25); ringGeo.rotateX(-Math.PI / 2);
-// without shadow maps («Быстрая») every hero gets a soft round shadow under its feet
+// without shadow maps every hero gets a soft round shadow under its feet
 const blobTex = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
   const gr = g.createRadialGradient(32, 32, 4, 32, 32, 31); gr.addColorStop(0, 'rgba(0,0,0,.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
@@ -27,13 +27,13 @@ export function makeVisual(heroId){
   const { mesh, geo, skel } = rig.build(mat);
   mesh.renderOrder = 2;
   const ol = new THREE.SkinnedMesh(geo, outlineMaterial()); ol.bind(skel, mesh.bindMatrix); ol.frustumCulled = false; ol.renderOrder = 2; rig.root.add(ol);
-  ol.visible = Q.level === 'high';   // outlines are a second pass over the hero: phones skip them
+  ol.visible = !LOW;   // outlines are a second pass over the hero: «Быстрая» skips them
   const silMat = silhouetteMaterial('#FFFFFF');
   const sil = new THREE.SkinnedMesh(geo, silMat); sil.bind(skel, mesh.bindMatrix); sil.frustumCulled = false; sil.renderOrder = 1; rig.root.add(sil);
   const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ map:ringTex, transparent:true, depthWrite:false, color:'#fff', opacity:0.9 }));
   ring.position.y = 0.03; ring.renderOrder = 1; rig.root.add(ring);
   let blob = null;
-  if(LOW){ blob = new THREE.Mesh(ringGeo, blobMat); blob.position.y = 0.025; blob.scale.setScalar(0.85); blob.renderOrder = 1; rig.root.add(blob); }
+  blob = new THREE.Mesh(ringGeo, blobMat); blob.position.y = 0.025; blob.scale.setScalar(0.85); blob.renderOrder = 1; rig.root.add(blob);
   const B = rig.bones;
   for(const b of rig.list){ b.userData.rest = b.position.clone(); b.userData.rot = b.rotation.clone(); }
   const muzzle = new THREE.Object3D(); muzzle.position.fromArray(parts.muzzle); B.gun.add(muzzle);
@@ -69,7 +69,7 @@ export function animate(V, f, dt, t){
     return;
   }
   root.rotation.x = 0; root.rotation.z = 0;
-  V.ring.visible = true; if(V.blob) V.blob.visible = true;
+  V.ring.visible = true; if(V.blob) V.blob.visible = !Q.shadows;   // soft round shadow when there are no shadow maps
   // ---------------- facing ----------------
   const spd = Math.hypot(f.vx, f.vz), moving = spd > 0.4;
   const aimHold = f.atkT < 0.55 || f.supT < 0.8 || f.aiming;
