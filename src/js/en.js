@@ -28,6 +28,10 @@ export const EN = {
   'Споровый автомат бьёт очередями. Держи кнопку — разброс растёт, стреляй короткими очередями.':'A spore gun that fires in bursts. Hold the trigger and the spread grows: fire in short bursts.',
   '4 секунды стреляет быстрее и точнее, очереди длиннее':'for 4 seconds fires faster and tighter, with longer bursts',
   'очередь из 5 зарядов, разброс растёт при стрельбе':'a burst of 5 shots, the spread grows as you fire',
+  'Дождевикбол':'Puffball', '3 на 3 · закати гриб-дождевик в ворота соперника':'3 vs 3 · roll the puffball into the other goal',
+  'Закати гриб-дождевик в ворота соперника: 2 гола — победа':'Roll the puffball into the other goal: 2 goals win',
+  'Гол!':'Goal!', 'Гол соперника':'They scored', 'Золотой гол!':'Golden goal!', 'Кто забьёт — тот победил':'Next goal wins', 'Золотой гол':'Golden goal',
+  'Мяч у тебя':'You have the ball', 'Атака — удар или пас, супер — пушечный удар':'Attack kicks or passes, the super is a cannon shot', 'Счёт':'Score', 'Лесное поле':'Forest Pitch',
   // battle
   'Супер':'Super', 'ПКМ · E':'RMB · E', 'Возрождение через':'Respawn in', 'Щёлкни по полю, чтобы управлять мышью':'Click the field to aim with the mouse',
   'Собери 10 спор и удержи их 15 секунд':'Collect 10 spores and hold them for 15 seconds', 'Ты':'You',

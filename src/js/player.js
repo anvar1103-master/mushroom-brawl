@@ -9,6 +9,7 @@ import { $, clamp, angDiff, TOUCH, store, lerp } from './util.js';
 import { canAttack, canSee, SHOT_Y, bouncePath, pathHits } from './combat.js';
 import { segHit, A, tileAtXZ, tileHeight } from './arena.js';
 import { unlockAudio } from './audio.js';
+import { goalOf } from './football.js';
 
 export const CAM = { yaw:Math.PI, pitch:-0.08, x:0, z:0, dist:3.5, pivotH:1.6, shoulder:0.6, sens:store.get('sens', 1), turnTo:null };
 const PITCH_MIN = -0.6, PITCH_MAX = 0.38;
@@ -130,6 +131,8 @@ document.addEventListener('touchend', onTouchEnd); document.addEventListener('to
 // tap: the nearest enemy we can see, preferring the ones in front of the camera
 export function autoTarget(sup){
   const me = G.me, W = sup ? me.H.super : me.H.attack;
+  // with the ball a quick tap shoots at the other goal
+  if(G.ball && G.ball.holder === me){ const g = goalOf(1 - me.team); return { x:g.x, z:g.z, foe:null }; }
   const lob = W.kind === 'lob' || W.kind === 'barrage' || W.kind === 'beam';
   let best = null, bs = 1e9;
   for(const o of G.fighters){

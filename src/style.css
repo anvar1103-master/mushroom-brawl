@@ -157,6 +157,9 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .mode-card b{display:block;font:900 22px/1 var(--font-display)} .mode-card small{display:block;color:var(--ink-2);font-weight:700;margin-top:4px}
 .shroom-ico{display:inline-block;flex:none;width:18px;height:18px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M12 17h8l1.5 11a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2z' fill='%23F4E9D2'/%3E%3Cpath d='M2 17C2 8 9 3 16 3s14 5 14 14c0 1.5-1 2-2.5 2h-23C3 19 2 18.5 2 17z' fill='%23E8463C'/%3E%3Ccircle cx='10' cy='10' r='2.4' fill='%23fff'/%3E%3Ccircle cx='19' cy='8' r='1.8' fill='%23fff'/%3E%3Ccircle cx='23' cy='14' r='2' fill='%23fff'/%3E%3Ccircle cx='14' cy='15' r='1.4' fill='%23fff'/%3E%3C/svg%3E") center/contain no-repeat;filter:drop-shadow(0 2px 2px rgba(0,0,0,.35))}
 .shroom-ico.big{width:40px;height:40px}
+.ball-ico{display:inline-block;flex:none;width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0 18%,#F1E7D2 19% 55%,#C9B08A 56% 100%);box-shadow:inset -2px -3px 0 rgba(120,90,60,.35),0 2px 3px rgba(0,0,0,.35)}
+.ball-ico.big{width:40px;height:40px} .tscore .ball-ico{width:24px;height:24px}
+.mode-card.ball{background:linear-gradient(135deg,rgba(120,200,255,.25),rgba(255,255,255,.06));box-shadow:inset 0 0 0 2px rgba(120,200,255,.45)} .mode-card.ball.sel{box-shadow:inset 0 0 0 3px rgba(120,200,255,.95)}
 .gem-ico.gold{background:radial-gradient(circle at 35% 30%,#fff 0 12%,#FFF0B0 13% 30%,#FFC93C 31% 70%,#D98A12 71%);clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);filter:drop-shadow(0 0 6px rgba(255,201,60,.8))}
 .tscore .shroom-ico{width:26px;height:26px}
 .br .tscore.ally{background:linear-gradient(#5E8E3E,#3A6226)} .br .tscore.foe{background:linear-gradient(#E0A626,#A86E0E)}
@@ -221,7 +224,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
   .hero-info{margin-top:8px} .hero-info h3{font-size:20px} .hero-info .sub{margin-bottom:4px}
   .abil{margin-top:6px;padding:6px 8px} .abil .k{width:26px;height:26px;font-size:13px}
   .hcard svg{max-width:34px} .hcard{padding:4px 1px;border-radius:12px} .heroes{gap:3px} .hcard b{font-size:10px} .hcard small{font-size:8px}
-  .mode-card{padding:7px 8px;gap:8px} .mode-card b{font-size:17px} .mode-card small{font-size:11px;margin-top:2px} .modes{gap:5px} .gem-ico.big,.shroom-ico.big{width:28px;height:28px} .mode .row.small:last-of-type{display:none}
+  .mode-card{padding:7px 8px;gap:8px} .mode-card b{font-size:17px} .mode-card small{font-size:11px;margin-top:2px} .modes{gap:5px} .gem-ico.big,.shroom-ico.big,.ball-ico.big{width:28px;height:28px} .mode .row.small:last-of-type{display:none}
   .seg button{padding:6px 6px;font-size:12px} .row{font-size:13px}
   .panel{padding:10px}
   .play{padding:12px;font-size:22px}

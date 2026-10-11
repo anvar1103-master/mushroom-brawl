@@ -20,9 +20,9 @@ const shadowTex = (() => { const c = document.createElement('canvas'); c.width =
 const shadowGeo = new THREE.PlaneGeometry(0.7, 0.7); shadowGeo.rotateX(-Math.PI / 2);
 const shadowMat = new THREE.MeshBasicMaterial({ map:shadowTex, transparent:true, depthWrite:false });
 
-export function buildMine(){
+export function buildMine(show = true){
   if(mine){ scene.remove(mine.g); mine = null; }
-  if(!A.mine) return;
+  if(!A.mine || !show) return;
   const g = new THREE.Group(); g.position.set(A.mine.x, 0, A.mine.z);
   // mossy mound with a glowing hollow
   const mound = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.35, 0.32, 24), stdMat({ color:'#6E5A3E', roughness:0.95 }));

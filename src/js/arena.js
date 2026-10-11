@@ -321,6 +321,21 @@ function buildGround(){
       g.strokeStyle = ch === 'b' ? 'rgba(80,190,255,.85)' : ch === 'r' ? 'rgba(255,90,90,.85)' : 'rgba(255,215,90,.8)'; g.lineWidth = 4;
       g.beginPath(); g.arc((c + 0.5) * S, (r + 0.5) * S, S * 0.38, 0, TAU); g.stroke();
     }
+    // the football pitch: chalk lines and the two goal mouths in team colours
+    if(A.map.mode === 'ball'){
+      g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 5;
+      g.beginPath(); g.moveTo(0, H / 2); g.lineTo(W, H / 2); g.stroke();
+      g.beginPath(); g.arc(W / 2, H / 2, S * 3.2, 0, TAU); g.stroke();
+      for(let r = 0; r < A.H; r++) for(let c = 0; c < A.W; c++){
+        const ch = A.rows[r][c]; if(ch !== 'g' && ch !== 'h') continue;
+        g.fillStyle = ch === 'g' ? 'rgba(255,90,90,.35)' : 'rgba(80,190,255,.35)'; g.fillRect(c * S, r * S, S, S);
+      }
+      // the boxes in front of each goal
+      for(const top of [true, false]){
+        const y0 = top ? S : H - S * 6, bw = S * 11;
+        g.strokeRect(W / 2 - bw / 2, y0, bw, S * 5);
+      }
+    }
   });
   tex.anisotropy = 8;
   // the floor dips under ponds, so it is a displaced grid rather than a flat quad
