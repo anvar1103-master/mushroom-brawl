@@ -12,6 +12,7 @@ import { makeVisual, animate, setTeamLook, kick } from './anim.js';
 import { newBot, botThink } from './bots.js';
 import { buildMine, startSpores, updateSpores, clearSpores } from './mode.js';
 import { freeBolt, clearShotFx, updateShotFx, shotFxSamples } from './shotfx.js';
+import { applyEnv, pickEnv, updateEnv, envLabel, ENV } from './env.js';
 import { BALL, startFootball, updateFootball, clearFootball, footballSamples } from './football.js';
 import { ROYALE, startRoyale, updateRoyale, clearRoyale, royaleSamples } from './royale.js';
 import { playerInput, updateCamera, updateGuide, CAM, releaseLock, lockHint, resetTouch } from './player.js';
@@ -29,9 +30,8 @@ if(onYandex()) await yaInit(); else applyLang();
 const setLoad = k => { $('load-bar').style.width = Math.round(k * 100) + '%'; };
 await Promise.all([loadNature(k => setLoad(k * 0.85)), preloadSfx()]);
 setLoad(0.92);
-buildEnv();
-bakeSky();
 buildArena('glade');
+{ const e = pickEnv(); applyEnv(e.sky, e.season); }
 buildMine();
 applyQuality();
 addEventListener('resize', resize);
@@ -63,10 +63,12 @@ function renderMenu(){
 $('m-mode').onclick = e => { const b = e.target.closest('.mode-card'); if(!b || b.dataset.v === MENU.mode) return; MENU.mode = b.dataset.v; store.set('mode', MENU.mode); sfx('select'); renderMenu(); };
 $('m-diff').onclick = e => { const v = e.target.dataset.v; if(!v) return; MENU.diff = v; store.set('diff', v); sfx('click'); renderMenu(); };
 // ---------------- settings ----------------
-const SET = { fps:store.get('fps', false) };
+const SET = { fps:store.get('fps', false), tod:store.get('tod', 'rand'), season:store.get('season', 'rand') };
 function renderSettings(){
   for(const b of $('s-gfx').querySelectorAll('button')) b.classList.toggle('sel', b.dataset.v === Q.level);
   for(const b of $('s-fps').querySelectorAll('button')) b.classList.toggle('sel', (b.dataset.v === '1') === SET.fps);
+  for(const b of $('s-tod').querySelectorAll('button')) b.classList.toggle('sel', b.dataset.v === SET.tod);
+  for(const b of $('s-season').querySelectorAll('button')) b.classList.toggle('sel', b.dataset.v === SET.season);
   for(const b of $('s-snd').querySelectorAll('button')){ const on = b.dataset.v === 'sfx' ? AU.sfxOn : AU.musicOn; b.classList.toggle('sel', on); b.classList.toggle('off', !on); }
   $('s-sens').value = CAM.sens; $('s-sens-v').textContent = (+CAM.sens).toFixed(2);
   $('fps').hidden = !SET.fps;
@@ -77,6 +79,9 @@ $('p-set').onclick = () => openSettings(true);
 $('s-close').onclick = () => { $('settings').hidden = true; sfx('click'); };
 $('s-gfx').onclick = e => { const v = e.target.dataset.v; if(!v || v === Q.level) return; setQuality(v); sfx('click'); setTimeout(() => location.reload(), 150); };
 $('s-fps').onclick = e => { const v = e.target.dataset.v; if(v === undefined) return; SET.fps = v === '1'; store.set('fps', SET.fps); sfx('click'); renderSettings(); };
+// time of day and season: picked for the next match (and shown in the menu right away)
+$('s-tod').onclick = e => { const v = e.target.dataset.v; if(!v) return; SET.tod = v; store.set('tod', v); sfx('click'); renderSettings(); if(G.state === 'menu'){ const p = pickEnv(); applyEnv(p.sky, p.season); } };
+$('s-season').onclick = e => { const v = e.target.dataset.v; if(!v) return; SET.season = v; store.set('season', v); sfx('click'); renderSettings(); if(G.state === 'menu'){ const p = pickEnv(); applyEnv(p.sky, p.season); } };
 $('s-snd').onclick = e => { const v = e.target.dataset.v; if(!v) return; unlockAudio(); if(v === 'sfx') setSfx(!AU.sfxOn); else setMusic(!AU.musicOn); sfx('click'); renderSettings(); };
 $('s-sens').oninput = e => { CAM.sens = +e.target.value; store.set('sens', CAM.sens); $('s-sens-v').textContent = CAM.sens.toFixed(2); };
 renderSettings();
@@ -105,6 +110,8 @@ let countT = 0, endT = 0, lastCount = 0;
 function useArena(id){
   if(A.map.id !== id){ buildArena(id); buildMine(id === 'glade'); }
   else resetCrates();
+  // every match gets its own time of day and season (or the ones picked in the settings)
+  const e = pickEnv(); applyEnv(e.sky, e.season);
 }
 function startMatch(opts = {}){
   cleanup();
@@ -162,7 +169,7 @@ function beginMatch(title, sub){
   const br = G.mode === 'br';
   const ball = G.mode === 'ball';
   $('ico0').className = br ? 'shroom-ico' : ball ? 'ball-ico' : 'gem-ico'; $('ico1').className = br ? 'gem-ico gold' : ball ? 'ball-ico' : 'gem-ico';
-  announce(title, sub, 'sun', 2.4);
+  announce(title, tr(sub) + ' · ' + tr(envLabel()), 'sun', 2.6);
 }
 function countdown(dt){
   countT -= dt;
@@ -326,7 +333,7 @@ function tick(dt){
     camera.lookAt(f.x, 0.8, f.z);
   } else if(G.me) updateCamera(dt);
   updateGuide(); lockHint();
-  updateFx(dt);
+  updateFx(dt); updateEnv(dt, G.time);
   updateTags();
   if(G.state !== 'menu') updateHud();
   tickAnnounce(dt);
@@ -357,6 +364,7 @@ window.__bg = {
     me:G.me && { hp:Math.round(G.me.hp), alive:G.me.alive, x:+G.me.x.toFixed(1), z:+G.me.z.toFixed(1), gems:G.me.gems, charge:+G.me.charge.toFixed(2), ammo:+G.me.ammo.toFixed(2) } }; },
   board:() => G.fighters.map(f => `${f.name}[${f.hero}/t${f.team}] k${f.kills} d${f.deaths} g${f.gemsPicked} dmg${Math.round(f.dmgDone)}`),
   fighters:() => G.fighters, G, A, CAM, menu:MENU, showMenu, cam(a){ G.dbgCam = a; },
+  env(sky, season){ applyEnv(sky, season); }, get envNow(){ return { ...ENV }; },
   info:() => ({ calls:renderer.info.render.calls, tris:renderer.info.render.triangles, geos:renderer.info.memory.geometries, tex:renderer.info.memory.textures, progs:renderer.info.programs.length, PR:Q.PR, post:Q.post }),
   post(v){ Q.post = !!v && !!Q.composer; Q.noPost = !v; },
   pause:setPause, tr, L, tick, dmg:damage,
