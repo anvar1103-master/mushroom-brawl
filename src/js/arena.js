@@ -183,7 +183,7 @@ const SEE_THROUGH = `
     float t = dot(vWP - C, D) / max(dot(D, D), 1e-4);
     if(t > 0.0 && t < 1.08){
       float r = mix(0.7, 1.7, clamp(t, 0.0, 1.0)), d = length(vWP - (C + D * t));
-      float keep = mix(0.22, 1.0, smoothstep(r * 0.55, r, d));
+      float keep = mix(0.14, 1.0, smoothstep(r * 0.55, r, d));
       float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
       if(ign > keep) discard;
     }
