@@ -34,7 +34,7 @@ export function restyleArena(){
   // the painted forest on the horizon is unlit: dim it at night (its season colour comes from the shared uniform)
   const k = ENV.sky === 'night' ? 0.32 : ENV.sky === 'dusk' ? 1 : 1.08;
   for(const m of A.bands || []) m.material.color.copy(m.userData.tint).multiplyScalar(k);
-  if(A.waterMat){ A.waterMat.color.set(winter ? '#D4ECF4' : '#4FB5C8'); A.waterMat.opacity = winter ? 0.96 : 0.82; A.waterMat.roughness = winter ? 0.35 : 0.12; }
+  if(A.waterMat){ A.waterMat.color.set(winter ? '#D4ECF4' : '#2C86A8'); A.waterMat.opacity = winter ? 0.96 : 0.9; A.waterMat.roughness = winter ? 0.35 : 0.2; }
   for(const m of A.flowers || []) m.visible = !winter;
 }
 

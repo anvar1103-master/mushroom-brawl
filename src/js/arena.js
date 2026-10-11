@@ -386,7 +386,7 @@ function buildGround(){
   }, { repeat:true });
   outTex.repeat.set(40, 40);
   const outer = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), seasonize(stdMat({ map:outTex, roughness:1 }), 'ground'));
-  outer.rotation.x = -Math.PI / 2; outer.position.y = -0.02; outer.receiveShadow = true; A.group.add(outer);
+  outer.rotation.x = -Math.PI / 2; outer.position.y = -0.85;   // below the pond beds, or it would cover the water outer.receiveShadow = true; A.group.add(outer);
 }
 
 function hedgeMat(){
@@ -566,7 +566,7 @@ function buildWater(){
   for(let r = 0; r < A.H; r++) for(let c = 0; c < A.W; c++) if(A.rows[r][c] === '~') list.push([c, r]);
   if(!list.length) return;
   const geos = list.map(([c, r]) => { const g = new THREE.PlaneGeometry(TILE + 0.5, TILE + 0.5); g.rotateX(-Math.PI / 2); g.translate(tileX(c), -0.16, tileZ(r)); return g; });
-  const mat = A.waterMat = stdMat({ color:'#4FB5C8', roughness:0.12, metalness:0.1, transparent:true, opacity:0.82 });
+  const mat = A.waterMat = stdMat({ color:'#2C86A8', roughness:0.2, metalness:0.05, transparent:true, opacity:0.9 });
   mat.onBeforeCompile = sh => {
     sh.uniforms.uTime = U.time;
     sh.vertexShader = 'varying vec3 vWP2;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n vWP2 = (modelMatrix * vec4(transformed, 1.0)).xyz;');

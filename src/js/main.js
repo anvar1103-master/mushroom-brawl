@@ -108,7 +108,7 @@ function cleanup(){
 let countT = 0, endT = 0, lastCount = 0;
 // each mode has its own map; switching costs one rebuild, replaying the same mode only resets the crates
 function useArena(id){
-  if(A.map.id !== id){ buildArena(id); buildMine(id === 'glade'); }
+  if(A.map.id !== id){ buildArena(id); buildMine(A.map.mode !== 'ball' && A.map.mode !== 'br'); }
   else resetCrates();
   // every match gets its own time of day and season (or the ones picked in the settings)
   const e = pickEnv(); applyEnv(e.sky, e.season);
@@ -120,7 +120,8 @@ function startMatch(opts = {}){
   document.body.classList.toggle('br', mode === 'br');
   if(mode === 'br') return startRoyaleMatch(opts);
   const ball = mode === 'ball';
-  useArena(ball ? 'pitch' : 'glade');
+  // «Споры» is played on either of its two maps
+  useArena(ball ? 'pitch' : opts.map || (Math.random() < 0.5 ? 'glade' : 'creek'));
   if(ball) startFootball(); else startSpores();
   const names = shuffle([...NAMES]);
   const myHero = opts.hero || MENU.hero;
@@ -137,7 +138,7 @@ function startMatch(opts = {}){
   }
   for(const f of G.fighters){ makeTag(f); spawn(f); }
   if(ball) beginMatch('Дождевикбол', 'Закати гриб-дождевик в ворота соперника: 2 гола — победа');
-  else beginMatch('Споры', 'Собери 10 спор и удержи их 15 секунд');
+  else beginMatch('Споры', A.map.name + ' · ' + 'Собери 10 спор и удержи их 15 секунд');
 }
 // «Последний гриб»: ten fighters, each on their own team, spread over the corners of the maze
 function startRoyaleMatch(opts){

@@ -49,6 +49,13 @@ console.log('Brawl Green test:', PAGE);
     ok(s.state === 'end' && s.mode === 'br' && s.place >= 1, `${hero}: royale ends (#${s.place}, ${s.t} s, fog ${s.fog} m, ${r.knock} knocked out, ${r.crates} crates, ${r.power} power picked)`);
     ok(r.crates > 0 && r.power > 0, `${hero}: crates break and drop power`);
   }
+  // the second Spores map
+  {
+    await page.evaluate(() => { __bg.start({ mode:'spores', map:'creek', hero:'beetle', skipCount:true }); __bg.autopilot(true); });
+    let s; for(let i = 0; i < 50; i++){ await page.evaluate(() => __bg.sim(5)); s = await page.evaluate(() => __bg.s); if(s.state === 'end') break; }
+    const map = await page.evaluate(() => __bg.A.map.id);
+    ok(s.state === 'end' && map === 'creek', `Тихие заводи: match ends (${s.why}, ${s.t} s, spores ${s.count.join(':')})`);
+  }
   // «Дождевикбол»: a 3 vs 3 bot match that ends with goals scored
   {
     await page.evaluate(() => { __bg.start({ mode:'ball', hero:'hopper', skipCount:true }); __bg.autopilot(true); });
