@@ -7,11 +7,15 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { $, TOUCH, store, rand } from './util.js';
 
 export const canvas = $('c');
-// «Быстрая» graphics (the default on phones) is fixed for the session: cheaper materials, no shadow maps,
-// a sky baked once instead of drawn every frame. Switching quality reloads the page.
-export const LOW = store.get('q', TOUCH ? 'low' : 'high') !== 'high';
+// Graphics quality, picked once per session (switching reloads the page):
+//   low «Быстрая»     Lambert materials, no shadow maps (blob shadows), no outlines — phones by default
+//   medium «Средняя»  PBR materials, plain shadows, outlines, no bloom — computers by default
+//   high «Красивая»   soft shadows and bloom
+// On top of that the frame watcher adapts while you play: bloom off → lower resolution → shadows off, and back up.
+export const LEVEL = (() => { const v = store.get('gfx', TOUCH ? 'low' : 'medium'); return ['low', 'medium', 'high'].includes(v) ? v : 'medium'; })();
+export const LOW = LEVEL === 'low', HIGH = LEVEL === 'high';
 const LAMBERT_DROP = ['roughness', 'metalness', 'envMapIntensity', 'roughnessMap', 'metalnessMap'];
-// standard (PBR) material on «Красивая», a much cheaper Lambert one on «Быстрая»
+// PBR material on medium/high, a much cheaper Lambert one on low
 export function stdMat(o = {}){
   if(!LOW) return new THREE.MeshStandardMaterial(o);
   const l = Object.assign({}, o); for(const k of LAMBERT_DROP) delete l[k];
@@ -22,7 +26,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = !LOW;
 // soft shadows cost several texture reads per pixel: phones get the plain filter
-renderer.shadowMap.type = store.get('q', TOUCH ? 'low' : 'high') === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+renderer.shadowMap.type = HIGH ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 
 export const scene = new THREE.Scene();
 export const FOG_COL = new THREE.Color('#B9A08A');   // warm evening haze
@@ -110,10 +114,10 @@ export function canvasTex(w, h, draw, opt = {}){
   return t;
 }
 
-// ---- quality: «high» gets bloom and full resolution; the frame watcher trims resolution when frames run long ----
-export const Q = { level:store.get('q', TOUCH ? 'low' : 'high'), PR:1, post:false, composer:null, bloom:null, perfN:0, perfSum:0, calm:0 };
-export function maxPR(){ return Math.min(Q.level === 'high' ? 2 : 1.6, devicePixelRatio || 1); }
-const minPR = () => Math.min(Q.level === 'high' ? 0.7 : 0.9, devicePixelRatio || 1);
+// ---- quality ----
+export const Q = { level:LEVEL, PR:1, post:false, composer:null, bloom:null, perfN:0, perfSum:0, calm:0, shadows:!LOW, fps:0, frames:0, fpsT:0, onShadows:null };
+export function maxPR(){ return Math.min(HIGH ? 2 : LOW ? 1.3 : 1.5, devicePixelRatio || 1); }
+const minPR = () => Math.min(LOW ? 0.8 : 0.75, devicePixelRatio || 1);
 export function resize(){
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false);
@@ -125,41 +129,50 @@ export function resize(){
 function initPost(){
   if(Q.composer) return;
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-  const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type:THREE.HalfFloatType, samples:4 });
+  const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type:THREE.HalfFloatType, samples:2 });
   Q.composer = new EffectComposer(renderer, rt);
   Q.composer.addPass(new RenderPass(scene, camera));
   Q.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.35, 0.5, 0.92);
   Q.composer.addPass(Q.bloom);
   Q.composer.addPass(new OutputPass());
 }
-export function applyQuality(level){
-  if(level){ Q.level = level; store.set('q', level); }
-  const hi = Q.level === 'high';
-  Q.PR = Math.min(maxPR(), hi ? 2 : 1.3); renderer.setPixelRatio(Q.PR);
-  scene.fog.near = hi ? 48 : 30; scene.fog.far = hi ? 120 : 80; camera.far = hi ? 400 : 160; camera.updateProjectionMatrix();
-  sky.scale.setScalar(hi ? 1 : 0.45);   // the sky dome must stay inside the far plane
-  const sz = hi ? 2048 : 1024;
+// a new level is stored and the page reloads (materials and shadows are chosen at start)
+export function setQuality(level){ store.set('gfx', level); }
+export function applyQuality(){
+  Q.PR = Math.min(maxPR(), LOW ? 1.15 : 1.25); renderer.setPixelRatio(Q.PR);
+  scene.fog.near = LOW ? 30 : 40; scene.fog.far = LOW ? 85 : 110; camera.far = 160; camera.updateProjectionMatrix();
+  const sz = HIGH ? 2048 : 1024;
   if(sun.shadow.mapSize.x !== sz){ sun.shadow.mapSize.set(sz, sz); if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map = null; } }
-  if(hi){ try{ initPost(); }catch(e){ Q.composer = null; } }
-  Q.post = hi && !!Q.composer;
+  if(HIGH){ try{ initPost(); }catch(e){ Q.composer = null; } }
+  Q.post = HIGH && !!Q.composer;
   Q.perfN = Q.perfSum = Q.calm = 0;
   resize();
 }
-// called every frame with the raw frame time
+// turning shadow maps off mid-game: every material has to be rebuilt once without them
+function dropShadows(){
+  Q.shadows = false; renderer.shadowMap.enabled = false;
+  scene.traverse(o => { if(o.material) for(const m of [].concat(o.material)) m.needsUpdate = true; });
+  if(Q.onShadows) Q.onShadows(false);
+}
+// called every frame with the raw frame time: keeps the game near 60 fps
 export function perfWatch(raw, active){
+  Q.frames++; Q.fpsT += raw;
+  if(Q.fpsT >= 0.5){ Q.fps = Math.round(Q.frames / Q.fpsT); Q.frames = 0; Q.fpsT = 0; }
   if(!active || raw > 0.5 || document.hidden) return;
   Q.perfN++; Q.perfSum += raw;
-  if(Q.perfN < 90) return;
+  if(Q.perfN < 60) return;
   const avg = Q.perfSum / Q.perfN; Q.perfN = 0; Q.perfSum = 0;
-  if(avg > 0.0195){
+  if(avg > 0.0205){
     Q.calm = 0;
     if(Q.post){ Q.post = false; Q.noPost = true; }
-    else if(Q.PR > minPR()){ Q.PR = Math.max(minPR(), Q.PR * 0.88); renderer.setPixelRatio(Q.PR); resize(); }
-  } else if(avg < 0.0125 && ++Q.calm >= 3){
-    Q.calm = 0;
-    if(Q.PR < maxPR()){ Q.PR = Math.min(maxPR(), Q.PR * 1.12); renderer.setPixelRatio(Q.PR); resize(); }
-    else if(!Q.post && Q.composer && Q.level === 'high' && !Q.noPost) Q.post = true;
+    else if(Q.PR > minPR() + 0.01){ Q.PR = Math.max(minPR(), Q.PR * 0.88); renderer.setPixelRatio(Q.PR); resize(); }
+    else if(Q.shadows && ++Q.slow >= 2) dropShadows();
+  } else if(avg < 0.0135 && ++Q.calm >= 3){
+    Q.calm = 0; Q.slow = 0;
+    if(Q.PR < maxPR() - 0.01){ Q.PR = Math.min(maxPR(), Q.PR * 1.1); renderer.setPixelRatio(Q.PR); resize(); }
+    else if(!Q.post && Q.composer && HIGH && !Q.noPost) Q.post = true;
   }
 }
+Q.slow = 0;
 export function render(){ if(Q.post && Q.composer) Q.composer.render(); else renderer.render(scene, camera); }
 export const rnd = rand;
