@@ -7,7 +7,7 @@ import { camera, canvas, scene } from './engine.js';
 import { G } from './state.js';
 import { $, clamp, angDiff, TOUCH, store, lerp } from './util.js';
 import { canAttack, canSee, SHOT_Y } from './combat.js';
-import { segHit, A, tileAtXZ, tileHeight, blocksSight, HEDGE_H } from './arena.js';
+import { segHit, A, tileAtXZ, tileHeight } from './arena.js';
 import { unlockAudio } from './audio.js';
 
 export const CAM = { yaw:Math.PI, pitch:-0.08, x:0, z:0, dist:3.5, pivotH:1.6, shoulder:0.6, sens:store.get('sens', 1), turnTo:null };
@@ -55,8 +55,12 @@ const inMatch = () => G.state === 'play' || G.state === 'countdown';
 function stickAt(x, y){ const b = $('stick'); b.style.left = x + 'px'; b.style.top = y + 'px'; b.hidden = false; }
 function onTouchStart(e){
   unlockAudio();
-  if(!inMatch()) return;
+  if(!inMatch() || G.paused) return;
+  let game = false;
   for(const t of e.changedTouches){
+    // pause and every other interface button keep their normal tap; only the battle field drives the stick and camera
+    if(t.target.closest && t.target.closest('button:not([data-btn]), input, .screen')) continue;
+    game = true;
     const tgt = t.target.closest && t.target.closest('[data-btn]');
     if(tgt){
       const kind = tgt.dataset.btn;
@@ -69,10 +73,16 @@ function onTouchStart(e){
     if(t.clientX < innerWidth * 0.42 && !T.move){ T.move = { id:t.identifier, x0:t.clientX, y0:t.clientY, dx:0, dy:0 }; stickAt(t.clientX, t.clientY); }
     else if(!T.cam) T.cam = { id:t.identifier, x:t.clientX, y:t.clientY };
   }
-  e.preventDefault();
+  if(game) e.preventDefault();
+}
+// drop every held touch (pause, end of match): the stick and buttons start fresh afterwards
+export function resetTouch(){
+  for(const k of ['atk', 'sup']) if(T[k]){ T[k].el.classList.remove('on'); T[k] = null; }
+  T.move = T.cam = null; $('stick').hidden = true; $('knob').style.transform = '';
 }
 const TOUCH_K = 0.0055;
 function onTouchMove(e){
+  if(!T.move && !T.cam && !T.atk && !T.sup) return;
   for(const t of e.changedTouches){
     if(T.move && t.identifier === T.move.id){
       let dx = t.clientX - T.move.x0, dy = t.clientY - T.move.y0; const d = Math.hypot(dx, dy), R = 56;
@@ -154,9 +164,11 @@ function castAim(me){
   AIM.groundHit = d.y < -0.01;
   const tg = AIM.groundHit ? (o.y - 0.05) / -d.y : 40;
   AIM.gx = o.x + d.x * Math.min(tg, 40); AIM.gz = o.z + d.z * Math.min(tg, 40);
-  // first wall, rock or ground along the ray
+  // first wall, rock or ground along the ray — starting level with the hero: the see-through hedges between the
+  // camera and the hero must not catch the shot
+  const s0 = Math.max(0.6, (me.x - o.x) * d.x + (me.z - o.z) * d.z);
   let t = Math.min(tg, 40);
-  for(let s = 0.6; s < t; s += 0.2){
+  for(let s = s0; s < t; s += 0.2){
     const x = o.x + d.x * s, y = o.y + d.y * s, z = o.z + d.z * s;
     if(y < tileHeight(tileAtXZ(x, z))){ t = s; break; }
   }
@@ -166,7 +178,7 @@ function castAim(me){
   for(const f of G.fighters){
     if(!f.alive || f.team === me.team || !f.seen) continue;
     const px = f.x - o.x, pz = f.z - o.z, along = (px * d.x + pz * d.z) / (dl * dl);
-    if(along <= 0 || along >= t) continue;
+    if(along <= s0 - 0.6 || along >= t) continue;
     const cx = o.x + d.x * along - f.x, cz = o.z + d.z * along - f.z, y = o.y + d.y * along;
     if(cx * cx + cz * cz < (f.H.rad + 0.15) ** 2 && y > -0.2 && y < f.H.height + (f.H.hover || 0) + 0.3){ t = along; AIM.foe = f; }
   }
@@ -203,6 +215,7 @@ export function playerInput(dt){
 
 // ---------------- over-the-shoulder camera ----------------
 const target = new THREE.Vector3();
+const outside = ch => ch === 'X';
 export function updateCamera(dt){
   const me = G.me; if(!me) return;
   const k = 1 - Math.exp(-dt * 14);
@@ -211,12 +224,13 @@ export function updateCamera(dt){
   camFwd.set(sy * cp, sp, cy * cp);
   const rx = -cy, rz = sy;                                    // right of the camera
   const px = CAM.x + rx * CAM.shoulder * 0.4, pz = CAM.z + rz * CAM.shoulder * 0.4, py = CAM.pivotH;
-  // wanted spot: behind and a little to the right; pull in when a hedge is in the way
+  // wanted spot: behind and a little to the right. Hedges in the way turn see-through (arena.js), so the camera
+  // keeps its distance; it only pulls in to stay inside the fence
   let dist = CAM.dist;
   const wx = px - camFwd.x * dist + rx * CAM.shoulder, wz = pz - camFwd.z * dist + rz * CAM.shoulder;
-  const hit = segHit(px, pz, wx, wz, blocksSight);
+  const hit = segHit(px, pz, wx, wz, outside);
   let cx = wx, cz = wz, cyy = py - camFwd.y * dist + 0.25;
-  if(hit >= 0 && cyy < HEDGE_H + 0.2){ const kk = Math.max(0.15, hit - 0.08); cx = px + (wx - px) * kk; cz = pz + (wz - pz) * kk; cyy = py + (cyy - py) * kk; }
+  if(hit >= 0){ const kk = Math.max(0.3, hit - 0.12); cx = px + (wx - px) * kk; cz = pz + (wz - pz) * kk; cyy = py + (cyy - py) * kk; }
   cyy = Math.max(0.35, cyy);
   if(G.shake > 0){ const s = G.shake * 0.12; cx += (Math.random() - 0.5) * s; cyy += (Math.random() - 0.5) * s; cz += (Math.random() - 0.5) * s; G.shake = Math.max(0, G.shake - dt * 2.5); }
   camera.position.set(cx, cyy, cz);

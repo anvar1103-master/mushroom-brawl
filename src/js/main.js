@@ -12,7 +12,7 @@ import { makeVisual, animate, setTeamLook, kick } from './anim.js';
 import { newBot, botThink } from './bots.js';
 import { buildMine, startSpores, updateSpores, clearSpores } from './mode.js';
 import { ROYALE, startRoyale, updateRoyale, clearRoyale, royaleSamples } from './royale.js';
-import { playerInput, updateCamera, updateGuide, CAM, releaseLock, lockHint } from './player.js';
+import { playerInput, updateCamera, updateGuide, CAM, releaseLock, lockHint, resetTouch } from './player.js';
 import { makeTag, updateTags, updateHud, feed, announce, tickAnnounce, renderHeroes, showEnd } from './hud.js';
 import { updateFx, clearFx, explosion, hitSpark, sporeBurst } from './fx.js';
 import { preloadSfx, unlockAudio, sfx, AU, setSfx, setMusic } from './audio.js';
@@ -243,7 +243,7 @@ on('spawn', f => { if(f === G.me && G.state === 'play'){ sfx('respawn'); CAM.yaw
 function setPause(p){
   if(G.state !== 'play' && G.state !== 'countdown') p = false;
   G.paused = p; $('pause').hidden = !p;
-  if(p) releaseLock();
+  if(p){ releaseLock(); resetTouch(); }
 }
 $('pause-btn').onclick = () => setPause(true);
 $('p-resume').onclick = () => { sfx('click'); setPause(false); };
@@ -259,7 +259,7 @@ function tick(dt){
   const live = G.state === 'play' || G.state === 'countdown' || G.state === 'end';
   if(live){
     if(G.state === 'countdown') countdown(dt);
-    if(G.state === 'play' && G.me && G.me.alive && !G.me.bot && !G.noInput) playerInput(dt);
+    if((G.state === 'play' || G.state === 'countdown') && G.me && G.me.alive && !G.me.bot && !G.noInput) playerInput(dt);
     for(const f of G.fighters) if(f.bot && G.state === 'play') botThink(f, dt);
     for(const f of G.fighters) stepFighter(f, dt);
     updateShots(dt); updateLobs(dt); updatePuddles(dt); updateBeams(dt);
