@@ -23,7 +23,11 @@ export const EN = {
   'Катыш':'Rolly', 'мокрица':'woodlouse', 'Рикошет':'Ricochet', 'Скачущий катыш':'Bouncing Pebble', 'Большой катыш':'Big Roller',
   'Рогатка стреляет скачущими катышами: они отлетают от кустов и достают врага за углом.':'A slingshot that fires bouncing pebbles: they ricochet off hedges and reach enemies around corners.',
   'огромный шар долго скачет по коридорам и бьёт всех на пути':'a huge ball bounces through the corridors for a long time, hitting everyone in its way',
-  'отскакивает от кустов 2 раза, достаёт за углом':'bounces off hedges twice, reaches around corners',
+  'отскакивает от кустов 2 раза, после отскока бьёт сильнее':'bounces off hedges twice, hits harder after a bounce',
+  'Стрекот':'Chirp', 'кузнечик':'grasshopper', 'Автоматчик':'Gunner', 'Споровая очередь':'Spore Burst', 'Стрекотня':'Chirp Storm',
+  'Споровый автомат бьёт очередями. Держи кнопку — разброс растёт, стреляй короткими очередями.':'A spore gun that fires in bursts. Hold the trigger and the spread grows: fire in short bursts.',
+  '4 секунды стреляет быстрее и точнее, очереди длиннее':'for 4 seconds fires faster and tighter, with longer bursts',
+  'очередь из 5 зарядов, разброс растёт при стрельбе':'a burst of 5 shots, the spread grows as you fire',
   // battle
   'Супер':'Super', 'ПКМ · E':'RMB · E', 'Возрождение через':'Respawn in', 'Щёлкни по полю, чтобы управлять мышью':'Click the field to aim with the mouse',
   'Собери 10 спор и удержи их 15 секунд':'Collect 10 spores and hold them for 15 seconds', 'Ты':'You',

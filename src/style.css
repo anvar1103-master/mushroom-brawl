@@ -133,10 +133,10 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .panel h2{margin:0 0 10px;font:900 20px/1 var(--font-display)}
 .pick{grid-column:1;max-height:100%;overflow:auto}
 .mode{grid-column:3;display:flex;flex-direction:column;gap:12px}
-.heroes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px} .hcard{min-width:0} .hcard b,.hcard small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.heroes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px} .hcard{min-width:0} .hcard b,.hcard small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hcard{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px 8px;border-radius:16px;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 2px rgba(255,255,255,.08);transition:transform .12s}
-.hcard svg{width:62px;height:62px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.25))}
-.hcard b{font:900 15px/1 var(--font-display)} .hcard small{font:800 11px/1 var(--font-body);color:var(--muted)}
+.hcard svg{width:100%;max-width:56px;height:auto;aspect-ratio:1;filter:drop-shadow(0 3px 0 rgba(0,0,0,.25))}
+.hcard b{font:900 13px/1 var(--font-display)} .hcard small{font:800 10px/1 var(--font-body);color:var(--muted)}
 .hcard:hover{transform:translateY(-2px)}
 .hcard.sel{background:linear-gradient(rgba(139,240,90,.28),rgba(139,240,90,.1));box-shadow:inset 0 0 0 3px var(--lime)}
 .hero-info{margin-top:12px}
@@ -220,7 +220,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
   .hero-info p,.howto,.stat{display:none}
   .hero-info{margin-top:8px} .hero-info h3{font-size:20px} .hero-info .sub{margin-bottom:4px}
   .abil{margin-top:6px;padding:6px 8px} .abil .k{width:26px;height:26px;font-size:13px}
-  .hcard svg{width:40px;height:40px} .hcard{padding:5px 1px} .heroes{gap:4px} .hcard b{font-size:12px} .hcard small{font-size:9px}
+  .hcard svg{max-width:34px} .hcard{padding:4px 1px;border-radius:12px} .heroes{gap:3px} .hcard b{font-size:10px} .hcard small{font-size:8px}
   .mode-card{padding:7px 8px;gap:8px} .mode-card b{font-size:17px} .mode-card small{font-size:11px;margin-top:2px} .modes{gap:5px} .gem-ico.big,.shroom-ico.big{width:28px;height:28px} .mode .row.small:last-of-type{display:none}
   .seg button{padding:6px 6px;font-size:12px} .row{font-size:13px}
   .panel{padding:10px}

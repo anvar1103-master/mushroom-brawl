@@ -128,7 +128,7 @@ export function renderHeroes(sel, onPick){
   for(const b of box.querySelectorAll('.hcard')) b.onclick = () => onPick(b.dataset.h);
   const H = HEROES[sel];
   const bar = (label, v, max, txt) => `<div class="stat"><span>${label}</span><i><u style="width:${clamp(v / max * 100, 6, 100).toFixed(0)}%"></u></i><em>${txt}</em></div>`;
-  const dps = H.attack.kind === 'fan' ? H.attack.dmg * H.attack.count : H.attack.kind === 'needle' ? H.attack.dmgFar : H.attack.dmg;
+  const dps = H.attack.kind === 'fan' || H.attack.kind === 'burst' ? H.attack.dmg * H.attack.count : H.attack.kind === 'needle' ? H.attack.dmgFar : H.attack.dmg;
   $('hero-info').innerHTML = `<h3>${esc(H.name)}</h3><div class="sub">${esc(H.species)} · ${esc(H.role)}</div><p>${esc(H.desc)}</p>` +
     bar('Здоровье', H.hp, 4200, H.hp) + bar('Урон', dps, 1600, Math.round(dps)) + bar('Дальность', H.attack.range, 15, H.attack.range.toFixed(0) + ' м') + bar('Скорость', H.speed - 3.5, 2, H.speed.toFixed(1)) +
     `<div class="abil"><span class="k">⚔</span><div><b>${esc(H.attack.name)}</b><small>${esc(attackText(H.attack))}</small></div></div>` +
@@ -137,7 +137,8 @@ export function renderHeroes(sel, onPick){
 function attackText(W){
   if(W.kind === 'fan') return W.count + ' спор веером';
   if(W.kind === 'lob') return 'бомба через стены, горящая лужа';
-  if(W.kind === 'bounce') return 'отскакивает от кустов ' + W.bounces + ' раза, достаёт за углом';
+  if(W.kind === 'bounce') return 'отскакивает от кустов ' + W.bounces + ' раза, после отскока бьёт сильнее';
+  if(W.kind === 'burst') return 'очередь из ' + W.count + ' зарядов, разброс растёт при стрельбе';
   return 'дальний выстрел, урон растёт с расстоянием';
 }
 

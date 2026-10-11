@@ -6,7 +6,9 @@ import { TAU } from './util.js';
 
 // Numbers are in metres, seconds and hit points.
 // attack kinds: fan (spread of pellets), lob (thrown over walls, splash + puddle), needle (long fast shot, harder far away),
-// bounce (a pebble that ricochets off hedges; bounces: how many times; pierce: rolls through fighters instead of stopping)
+// bounce (a pebble that ricochets off hedges; bounces: how many times; pierce: rolls through fighters instead of stopping;
+//   ricochet: damage multiplier once it has bounced), burst (a quick string of small shots; bloom: how much each shot
+//   widens the spread while you keep firing), frenzy (super: a few seconds of faster, tighter bursts)
 export const HEROES = {
   shroom:{
     name:'Шляпник', species:'мухомор', role:'Дробовик', color:'#E23A2E', hp:3900, speed:5.0, rad:0.42, height:1.35,
@@ -27,10 +29,16 @@ export const HEROES = {
     super:{ kind:'beam', name:'Пронзающий луч', desc:'луч прошивает стены и всех на пути', range:21, width:0.75, dmg:2100, windup:0.38, color:'#FFE15A', charge:3600 }
   },
   roly:{
-    name:'Катыш', species:'мокрица', role:'Рикошет', color:'#6E7FA3', hp:3300, speed:5.0, rad:0.42, height:1.3,
+    name:'Катыш', species:'мокрица', role:'Рикошет', color:'#6E7FA3', hp:3500, speed:5.0, rad:0.42, height:1.3,
     desc:'Рогатка стреляет скачущими катышами: они отлетают от кустов и достают врага за углом.',
-    attack:{ kind:'bounce', name:'Скачущий катыш', range:12, speed:24, dmg:760, bounces:2, reload:1.2, cd:0.38, size:0.19, color:'#7FE7FF' },
-    super:{ kind:'bounce', name:'Большой катыш', desc:'огромный шар долго скачет по коридорам и бьёт всех на пути', range:30, speed:13, dmg:1150, bounces:7, pierce:true, knock:2.4, size:0.5, color:'#B8F4FF', charge:3800 }
+    attack:{ kind:'bounce', name:'Скачущий катыш', range:12, speed:24, dmg:800, bounces:2, ricochet:1.35, reload:1.2, cd:0.38, size:0.24, color:'#7FE7FF' },
+    super:{ kind:'bounce', name:'Большой катыш', desc:'огромный шар долго скачет по коридорам и бьёт всех на пути', range:30, speed:13, dmg:1150, bounces:7, pierce:true, knock:2.4, size:0.5, color:'#B8F4FF', charge:3000 }
+  },
+  hopper:{
+    name:'Стрекот', species:'кузнечик', role:'Автоматчик', color:'#5DB83A', hp:3400, speed:5.3, rad:0.4, height:1.35,
+    desc:'Споровый автомат бьёт очередями. Держи кнопку — разброс растёт, стреляй короткими очередями.',
+    attack:{ kind:'burst', name:'Споровая очередь', count:5, gap:0.07, spread:0.05, bloom:0.12, range:9.5, speed:30, dmg:200, reload:1.05, cd:0.42, size:0.13, color:'#B6FF5A' },
+    super:{ kind:'frenzy', name:'Стрекотня', desc:'4 секунды стреляет быстрее и точнее, очереди длиннее', time:4, color:'#E2FF8A', charge:4200 }
   }
 };
 export const HERO_IDS = Object.keys(HEROES);
@@ -211,6 +219,46 @@ export function buildHero(id){
     parts.muzzle = [0, 0.19, 0.12];
     for(const sx of ['L', 'R']) R.sph(B['foot' + sx], '#4A5575', [0, 0.06, 0.04], [0.1, 0.07, 0.14]);
   }
+  else if(id === 'hopper'){
+    // a grasshopper: long green body, big side eyes, folded hind legs and a drum-fed spore gun
+    R.bone('hips', null, 0, 0.46, 0);
+    R.bone('body', 'hips');
+    R.bone('head', 'body', 0, 0.42, 0.08);
+    R.bone('antL', 'head', 0.07, 0.16, 0.06); R.bone('antR', 'head', -0.07, 0.16, 0.06);
+    R.bone('eyes', 'head', 0, 0.04, 0.17);
+    R.bone('armL', 'body', 0.26, 0.16, 0.12); R.bone('armR', 'body', -0.26, 0.16, 0.12);
+    R.bone('gun', 'armR', -0.02, -0.1, 0.2);
+    R.bone('footL', null, 0.15, 0, 0); R.bone('footR', null, -0.15, 0, 0);
+    R.sph(B.body, '#5DB83A', [0, 0.04, 0], [0.26, 0.34, 0.26]);
+    R.sph(B.body, '#C9EE7A', [0, 0.02, 0.1], [0.19, 0.28, 0.18]);
+    for(let i = 0; i < 4; i++) R.prim(B.body, 'torus', '#4A9A2E', [0, -0.2 + i * 0.1, 0.02], [0.24 - Math.abs(i - 1.5) * 0.02, 0.24 - Math.abs(i - 1.5) * 0.02, 0.08], [Math.PI / 2, 0, 0]);
+    // wing covers down the back
+    for(const sx of [-1, 1]) R.prim(B.body, 'sph', '#3F8A2A', [sx * 0.1, 0.02, -0.2], [0.09, 0.32, 0.06], [0.25, 0, sx * 0.12]);
+    // the big folded jumping legs on both sides
+    for(const sx of [-1, 1]){
+      R.limb(B.body, '#4E9E31', [sx * 0.22, -0.12, -0.04], [sx * 0.3, 0.2, -0.22], 0.06);
+      R.limb(B.body, '#4E9E31', [sx * 0.3, 0.2, -0.22], [sx * 0.3, -0.38, -0.12], 0.04);
+      R.sph(B.body, '#C9EE7A', [sx * 0.3, 0.2, -0.22], 0.065);
+    }
+    // head: long face, eyes on the sides, a grin
+    R.sph(B.head, '#5DB83A', [0, 0, 0.04], [0.19, 0.22, 0.2]);
+    R.eyes(B.eyes, 0, 0, 0.12, 0.085, { brow:-0.2, browColor:'#2E5A1E' });
+    R.prim(B.head, 'torus', '#2E5A1E', [0, -0.1, 0.18], [0.06, 0.04, 0.05], [0, 0, Math.PI]);
+    for(const [sx, bn] of [[1, 'antL'], [-1, 'antR']]){
+      R.tube(B[bn], '#2E5A1E', [[0, 0, 0], [sx * 0.05, 0.16, -0.04], [sx * 0.12, 0.3, -0.16], [sx * 0.2, 0.36, -0.32]], 0.013);
+      R.sph(B[bn], '#B6FF5A', [sx * 0.2, 0.36, -0.32], 0.025, null, { glow:0.6 });
+    }
+    // arms and the spore gun: a body, a drum magazine, a short barrel with a glowing tip
+    R.limb(B.armR, '#4E9E31', [0, 0, 0], [-0.02, -0.1, 0.18], 0.04); R.sph(B.armR, '#C9EE7A', [-0.02, -0.11, 0.2], 0.055);
+    R.limb(B.armL, '#4E9E31', [0, 0, 0], [-0.1, -0.08, 0.3], 0.04); R.sph(B.armL, '#C9EE7A', [-0.12, -0.08, 0.33], 0.055);
+    R.prim(B.gun, 'box', '#6B4A2E', [0, 0, 0.02], [0.1, 0.12, 0.3]);
+    R.prim(B.gun, 'cyl', '#3E6B2A', [0, -0.09, 0.06], [0.09, 0.07, 0.09], [Math.PI / 2, 0, 0]);
+    R.prim(B.gun, 'cyl', '#2E3A2A', [0, 0.02, 0.26], [0.035, 0.24, 0.035], [Math.PI / 2, 0, 0]);
+    R.sph(B.gun, '#B6FF5A', [0, 0.02, 0.4], 0.04, null, { glow:1.8 });
+    R.sph(B.gun, '#B6FF5A', [0, 0.08, 0.0], [0.04, 0.03, 0.08], null, { glow:0.8 });
+    parts.muzzle = [0, 0.02, 0.42];
+    for(const sx of ['L', 'R']) R.sph(B['foot' + sx], '#3F8A2A', [0, 0.06, 0.04], [0.09, 0.06, 0.15]);
+  }
   return { rig:R, parts };
 }
 
@@ -233,4 +281,5 @@ export const ICONS = {
   wasp:'<svg viewBox="0 0 72 72" aria-hidden="true"><ellipse cx="17" cy="30" rx="15" ry="7" fill="#DDF2FF" opacity=".8" transform="rotate(-25 17 30)"/><ellipse cx="55" cy="30" rx="15" ry="7" fill="#DDF2FF" opacity=".8" transform="rotate(25 55 30)"/><ellipse cx="36" cy="55" rx="12" ry="14" fill="#F5C21B"/><path d="M25 52H47M26 60H46" stroke="#26201A" stroke-width="4.5"/><circle cx="36" cy="30" r="14" fill="#F5C21B"/><ellipse cx="29" cy="30" rx="5.5" ry="7.5" fill="#1B1A2A"/><ellipse cx="43" cy="30" rx="5.5" ry="7.5" fill="#1B1A2A"/><circle cx="28" cy="27" r="1.8" fill="#fff"/><circle cx="42" cy="27" r="1.8" fill="#fff"/><path d="M32 39Q36 42 40 39" stroke="#5A2A1A" stroke-width="2" fill="none"/><path d="M31 17Q27 7 22 6M41 17Q45 7 50 6" stroke="#26201A" stroke-width="2.5" fill="none"/></svg>'
 };
 ICONS.roly = '<svg viewBox="0 0 72 72" aria-hidden="true"><ellipse cx="36" cy="46" rx="22" ry="22" fill="#6E7FA3"/><path d="M15 36Q36 30 57 36M14 46Q36 40 58 46M16 56Q36 50 56 56" stroke="#B9C4DE" stroke-width="3.5" fill="none"/><ellipse cx="36" cy="25" rx="15" ry="12" fill="#6E7FA3"/><circle cx="30" cy="25" r="5" fill="#fff"/><circle cx="42" cy="25" r="5" fill="#fff"/><circle cx="31" cy="26" r="2.6" fill="#17131A"/><circle cx="41" cy="26" r="2.6" fill="#17131A"/><path d="M29 15Q22 4 12 8M43 15Q50 4 60 8" stroke="#3A4463" stroke-width="2.5" fill="none" stroke-linecap="round"/><circle cx="12" cy="8" r="3" fill="#7FE7FF"/><circle cx="60" cy="8" r="3" fill="#7FE7FF"/><path d="M58 50V64M58 52L52 44M58 52L64 44" stroke="#8A5A32" stroke-width="3" stroke-linecap="round"/><circle cx="58" cy="45" r="3.4" fill="#7FE7FF"/></svg>';
+ICONS.hopper = '<svg viewBox="0 0 72 72" aria-hidden="true"><path d="M14 62L22 30L30 62" stroke="#4E9E31" stroke-width="5" fill="none" stroke-linejoin="round"/><path d="M58 62L50 30L42 62" stroke="#4E9E31" stroke-width="5" fill="none" stroke-linejoin="round"/><ellipse cx="36" cy="48" rx="15" ry="18" fill="#5DB83A"/><ellipse cx="36" cy="50" rx="9" ry="13" fill="#C9EE7A"/><ellipse cx="36" cy="24" rx="13" ry="14" fill="#5DB83A"/><circle cx="27" cy="22" r="6" fill="#fff"/><circle cx="45" cy="22" r="6" fill="#fff"/><circle cx="28" cy="23" r="3" fill="#17131A"/><circle cx="44" cy="23" r="3" fill="#17131A"/><path d="M30 31Q36 35 42 31" stroke="#2E5A1E" stroke-width="2.5" fill="none"/><path d="M31 12Q26 2 16 2M41 12Q46 2 56 2" stroke="#2E5A1E" stroke-width="2.2" fill="none"/><rect x="50" y="44" width="16" height="7" rx="2" fill="#6B4A2E"/><circle cx="68" cy="47" r="3" fill="#B6FF5A"/></svg>';
 export const TAU_ = TAU;
