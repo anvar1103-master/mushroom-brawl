@@ -10,15 +10,16 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="fogtint" class="fogtint"></div>
 <div id="hud-world" class="hud-world"></div>
 <div id="fps" class="fps" hidden>60 FPS</div>
 
 <!-- ============ battle HUD ============ -->
 <div id="hud" class="hud" hidden>
   <div class="top">
-    <div class="tscore ally"><span class="gem-ico"></span><b id="sc0">0</b></div>
+    <div class="tscore ally"><span class="gem-ico" id="ico0"></span><b id="sc0">0</b></div>
     <div class="timer"><b id="timer">3:00</b><small id="mode-lbl">Споры</small></div>
-    <div class="tscore foe"><b id="sc1">0</b><span class="gem-ico"></span></div>
+    <div class="tscore foe"><b id="sc1">0</b><span class="gem-ico" id="ico1"></span></div>
   </div>
   <div id="cdown" class="cdown" hidden><b id="cd-n">15</b><span id="cd-t">Споры у нас!</span></div>
   <div id="feed" class="feed"></div>
@@ -55,7 +56,10 @@
     <div id="hero-info" class="hero-info"></div>
   </section>
   <section class="panel mode">
-    <div class="mode-card"><span class="gem-ico big"></span><div><b>Споры</b><small>3 на 3 · собери 10 спор и удержи их 15 секунд</small></div></div>
+    <div class="modes" id="m-mode">
+      <button class="mode-card" data-v="spores"><span class="gem-ico big"></span><div><b>Споры</b><small>3 на 3 · собери 10 спор и удержи их 15 секунд</small></div></button>
+      <button class="mode-card br" data-v="br"><span class="shroom-ico big"></span><div><b>Последний гриб</b><small>каждый сам за себя · 10 бойцов в лабиринте, туман сжимается</small></div></button>
+    </div>
     <div class="row"><span>Боты</span><div class="seg" id="m-diff"><button data-v="easy">Лёгкие</button><button data-v="normal">Обычные</button><button data-v="hard">Сложные</button></div></div>
     <button id="play" class="play">В бой!</button>
     <button id="m-set" class="ghost">Настройки</button>
