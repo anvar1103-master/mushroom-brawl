@@ -62,7 +62,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .feed div{padding:4px 10px;border-radius:10px;background:var(--glass);animation:fin .25s}
 .feed .a{color:#9FDFFF} .feed .f{color:#FF9F9F} .feed .m{color:var(--sun)}
 @keyframes fin{from{opacity:0;transform:translateX(20px)}}
-.ann{position:absolute;top:28%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
+.ann{position:absolute;top:28%;left:50%;transform:translate(-50%,-50%);width:max-content;max-width:92vw;text-align:center;pointer-events:none}
 .ann b{display:block;font:900 54px/1 var(--font-display);letter-spacing:-.01em;-webkit-text-stroke:2px rgba(0,0,0,.35);text-shadow:0 5px 0 rgba(0,0,0,.3)}
 .ann span{display:block;font:800 18px/1.2 var(--font-body);margin-top:8px}
 .ann.show{animation:annIn .45s cubic-bezier(.2,1.6,.4,1)}
@@ -201,7 +201,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
   .menu{grid-template-columns:1fr;background:rgba(8,20,12,.45)}
   .pick,.mode{grid-column:1}
   .hero-info p{display:none}
-  .ann b{font-size:38px}
+  .ann{top:36%} .ann b{font-size:38px} .ann span{font-size:15px}
   .tscore{font-size:24px;padding:5px 10px;min-width:56px}
   .end h1{font-size:46px}
 }
@@ -218,5 +218,6 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
   .panel{padding:10px}
   .play{padding:12px;font-size:22px}
   .tbtn.atk{width:104px;height:104px}
+  .ann{top:38%} .ann b{font-size:38px} .ann span{font-size:14px}
   .board.br{font-size:12px;margin:2px 0} .board.br td{padding:1px 5px} .board.br svg{width:18px;height:18px} .end .card{padding:12px;gap:6px}
 }
