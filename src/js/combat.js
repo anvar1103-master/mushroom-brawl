@@ -44,7 +44,7 @@ export function spawn(f, at){
   f.x = p.x; f.z = p.z; f.vx = f.vz = f.kx = f.kz = 0;
   f.alive = true; f.hp = f.max; f.ammo = AMMO; f.cdT = 0; f.deadT = 0; f.spawnT = 0; f.shieldT = SPAWN_SHIELD; f.regenT = 0;
   // face the enemy side (or the middle of the map when everyone is on their own)
-  f.aim = A.spawns[f.team] ? (f.team === 0 ? Math.PI : 0) : openYaw(f.x, f.z); f.V.yaw = f.aim; f.inp.aim = f.aim; f.atkT = f.supT = 9; f.spot = {}; f.pendingBeam = null; f.stunT = 0; f.gems = 0;
+  f.aim = A.spawns[f.team] ? (f.team === 0 ? Math.PI : 0) : openYaw(f.x, f.z); f.V.yaw = f.aim; f.inp.aim = f.aim; f.atkT = f.supT = 9; f.spot = {}; f.pendingBeam = null; f.stunT = 0; f.gems = 0; f.burst = null; f.frenzyT = 0; f.bloom = 0;
   f.V.root.visible = true; f.V.root.scale.setScalar(1);
   setTeamLook(f.V, lookFor(f));
   kick.spawn(f.V);
@@ -100,7 +100,9 @@ export function stepFighter(f, dt){
   f.shieldT = Math.max(0, f.shieldT - dt); f.revealT = Math.max(0, f.revealT - dt); f.flash = Math.max(0, f.flash - dt * 6);
   f.cdT = Math.max(0, f.cdT - dt); f.stunT = Math.max(0, f.stunT - dt);
   // charges come back one by one
-  if(f.ammo < AMMO){ f.ammo = Math.min(AMMO, f.ammo + dt / H.attack.reload); if(f.ammo >= AMMO && f.isMe) emit('ammoFull', f); }
+  if(f.frenzyT > 0) f.frenzyT = Math.max(0, f.frenzyT - dt);
+  if(f.atkT > 0.3 && f.bloom) f.bloom = Math.max(0, f.bloom - dt * 1.8);   // the spread closes again between bursts
+  if(f.ammo < AMMO){ f.ammo = Math.min(AMMO, f.ammo + dt / H.attack.reload * (f.frenzyT > 0 ? 3 : 1)); if(f.ammo >= AMMO && f.isMe) emit('ammoFull', f); }
   // heal up after a few seconds out of the fight
   if(f.regenT > REGEN_DELAY && f.hp < f.max){ const h = Math.min(f.max - f.hp, f.max * REGEN_RATE * dt); f.hp += h; f.healAcc = (f.healAcc || 0) + h; if(f.healAcc > 400){ if(f === G.me) dmgNumber(f.x, H.height + 0.3, f.z, f.healAcc, 'heal'); f.healAcc = 0; } }
   // movement with a short acceleration ramp
@@ -130,6 +132,7 @@ export function stepFighter(f, dt){
   // the hero turns with the crosshair from the very first second, during the countdown too
   if(!f.pendingBeam && (!frozen || (G.state === 'countdown' && f.stunT <= 0))) f.aim = inp.aim;
   if(f.pendingBeam){ f.pendingBeam.t -= dt; if(f.pendingBeam.t <= 0) fireBeam(f); }
+  if(f.burst){ f.burst.t -= dt; while(f.burst && f.burst.t <= 0) burstShot(f); }
   if(!frozen){
     if(inp.sup && f.charge >= 1) doSuper(f, inp.tx, inp.tz);
     else if(inp.fire) doAttack(f, inp.tx, inp.tz);
@@ -148,7 +151,7 @@ const MZ = new THREE.Vector3();
 function doAttack(f, tx, tz){
   if(!canAttack(f)) { if(f.isMe && f.ammo < 1 && f.cdT <= 0) emit('empty', f); return; }
   const H = f.H, W = H.attack;
-  f.ammo -= 1; f.cdT = W.cd; f.atkT = 0; f.regenT = 0; f.revealT = Math.max(f.revealT, 1.0);
+  f.ammo -= 1; f.cdT = W.cd * (f.frenzyT > 0 ? 0.6 : 1); f.atkT = 0; f.regenT = 0; f.revealT = Math.max(f.revealT, 1.0);
   const aim = Math.atan2(tx - f.x, tz - f.z);
   f.aim = aim; f.V.yaw = aim;   // snap so the shot leaves where the hero faces
   kick.attack(f.V);
@@ -163,6 +166,13 @@ function doSuper(f, tx, tz){
   f.aim = aim; f.V.yaw = aim;
   kick.super(f.V);
   if(S.kind === 'beam'){ f.pendingBeam = { t:S.windup, aim }; emit('super', f, true); sfx('super', f); return; }
+  if(S.kind === 'frenzy'){
+    // a few seconds of faster, tighter, longer bursts with charges coming back three times as fast
+    f.frenzyT = S.time; f.ammo = AMMO; f.bloom = 0;
+    ring(f.x, f.z, 0.3, 2, 0.5, S.color);
+    puff(glow, f.x, 1.0, f.z, { n:18, color:S.color, sp:3, vy:1.5, life:0.5, s0:0.25, s1:0.03, soft:true });
+    emit('super', f, false); sfx('super', f); return;
+  }
   fireWeapon(f, S, aim, tx, tz, true);
   emit('super', f, false);
   sfx('super', f);
@@ -181,6 +191,10 @@ function fireWeapon(f, W, aim, tx, tz, isSuper){
     puff(smoke, MZ.x, MZ.y, MZ.z, { n:isSuper ? 10 : 5, color:'#F2E8D0', sp:1.5, vx:Math.sin(aim) * 3, vz:Math.cos(aim) * 3, life:0.5, s0:0.18, s1:0.5, drag:4, soft:true, a:0.6 });
     if(isSuper){ f.kx -= Math.sin(aim) * 7; f.kz -= Math.cos(aim) * 7; G.shake = Math.max(G.shake, f.isMe ? 0.5 : 0); }
     sfx(isSuper ? 'boom' : 'shot_shotgun', f);
+  } else if(W.kind === 'burst'){
+    // the shots leave one by one along the current aim (see burstShot)
+    f.burst = { n:W.count + (f.frenzyT > 0 ? 2 : 0), t:0, W, pow };
+    burstShot(f);
   } else if(W.kind === 'bounce'){
     addShot(f, MZ.x, MZ.z, aim, W, W.dmg * pow, isSuper);
     flashAt(MZ.x, MZ.y, MZ.z, W.color, isSuper ? 1.4 : 0.6, 0.07);
@@ -204,6 +218,22 @@ function fireWeapon(f, W, aim, tx, tz, isSuper){
     }
     sfx('shot_throw', f);
   }
+}
+
+// one shot of a burst: follows the hero's aim, the spread opens up with every shot fired in a row
+function burstShot(f){
+  const B = f.burst; if(!B || !f.alive){ f.burst = null; return; }
+  const W = B.W, tight = f.frenzyT > 0 ? 0.3 : 1;
+  f.bloom = Math.min(1, (f.bloom || 0) + W.bloom);
+  const spread = W.spread * (1 + f.bloom * 4) * tight;
+  muzzlePos(f, MZ);
+  const a = f.aim + (Math.random() + Math.random() - 1) * spread;
+  addShot(f, MZ.x, MZ.z, a, W, W.dmg * B.pow, false);
+  flashAt(MZ.x, MZ.y, MZ.z, W.color, 0.45, 0.05);
+  sfx('shot_pop', f, 0.55, 1.3 + Math.random() * 0.2);
+  f.V.sp.kick.v += 4; f.atkT = 0;
+  B.n--; B.t += W.gap;
+  if(B.n <= 0) f.burst = null;
 }
 
 // ---------------- straight shots ----------------
@@ -268,7 +298,7 @@ export function updateShots(dt){
       damageCrateAt(nx + s.vx / l * 0.08, nz + s.vz / l * 0.08, s.W.dmgFar ? lerp(s.dmg, s.W.dmgFar * s.owner.pow, clamp(s.dist / s.range, 0, 1)) : s.dmg);
       // a ricochet: turn off the wall and fly on, a little faster
       if(s.bounces > 0){
-        [s.vx, s.vz] = reflect(nx, nz, s.vx, s.vz);
+        [s.vx, s.vz] = reflect(nx, nz, s.vx, s.vz); s.rico = (s.rico || 0) + 1;
         if(!s.hits){ s.vx *= 1.08; s.vz *= 1.08; }
         s.bounces--; end = false; s.bounced = true;
         const l2 = Math.hypot(s.vx, s.vz) || 1; nx += s.vx / l2 * 0.03; nz += s.vz / l2 * 0.03;   // step off the wall
@@ -282,6 +312,7 @@ export function updateShots(dt){
         if(s.hits){ if(s.hits.has(o)) continue; s.hits.add(o); }   // the big roller hits each fighter once and rolls on
         let dmg = s.dmg;
         if(s.W.dmgFar) dmg = lerp(s.dmg, s.W.dmgFar * s.owner.pow, clamp((s.dist + step) / s.range, 0, 1));
+        if(s.rico && s.W.ricochet) dmg *= s.W.ricochet;   // a bank shot hits harder
         damage(o, dmg, s.owner, s.isSuper);
         if(s.knock){ const l = Math.hypot(s.vx, s.vz); o.kx += s.vx / l * s.knock * 2.2; o.kz += s.vz / l * s.knock * 2.2; o.stunT = Math.max(o.stunT, 0.25); }
         hitSpark(o.x, SHOT_Y + 0.1, o.z, s.W.color); flashAt(o.x, SHOT_Y + 0.1, o.z, s.W.color, 0.7, 0.08);
@@ -433,7 +464,7 @@ export function damage(o, amount, src, isSuper, quiet){
   return amount;
 }
 export function kill(o, src){
-  o.hp = 0; o.alive = false; o.deadT = 0; o.deaths++; o.respawnT = RESPAWN; o.pendingBeam = null;
+  o.hp = 0; o.alive = false; o.deadT = 0; o.deaths++; o.respawnT = RESPAWN; o.pendingBeam = null; o.burst = null; o.frenzyT = 0;
   if(src && src !== o) src.kills++;
   sporeBurst(o.x, 0.8, o.z, o.H.color, 34);
   sfx('die', o);
@@ -457,6 +488,7 @@ export function updateFighterVisuals(dt, t){
     V.mat.opacity = op;
     // spawn shield shimmer
     if(f.shieldT > 0) V.mat.userData.u.uTint.value.setScalar(0.12 + Math.sin(t * 20) * 0.08);
+    else if(f.frenzyT > 0) V.mat.userData.u.uTint.value.setRGB(0.25, 0.45, 0.05).multiplyScalar(0.6 + Math.sin(t * 18) * 0.4);
     else if(V.id !== 'wasp' || f.supT >= 1.2) V.mat.userData.u.uTint.value.setScalar(0);
   }
 }

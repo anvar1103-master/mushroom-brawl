@@ -34,7 +34,7 @@ console.log('Brawl Green test:', PAGE);
 {
   const { ctx, page, errors, outside } = await open('ru');
   ok(true, 'the game loads');
-  for(const hero of ['shroom', 'beetle', 'wasp', 'roly']){
+  for(const hero of ['shroom', 'beetle', 'wasp', 'roly', 'hopper']){
     await page.evaluate(h => { __bg.start({ hero:h, skipCount:true }); __bg.autopilot(true); }, hero);
     let s; for(let i = 0; i < 50; i++){ await page.evaluate(() => __bg.sim(5)); s = await page.evaluate(() => __bg.s); if(s.state === 'end') break; }
     const kills = await page.evaluate(() => __bg.G.fighters.reduce((a, f) => a + f.kills, 0));
@@ -42,7 +42,7 @@ console.log('Brawl Green test:', PAGE);
     ok(kills > 0, `${hero}: fighters actually fight`);
   }
   // «Последний гриб»: ten fighters, fog, crates; the match ends when you fall or are the last one left
-  for(const hero of ['beetle', 'roly']){
+  for(const hero of ['roly', 'hopper']){
     await page.evaluate(h => { __bg.start({ mode:'br', hero:h, skipCount:true }); __bg.autopilot(true); }, hero);
     let s; for(let i = 0; i < 60; i++){ await page.evaluate(() => __bg.sim(5)); s = await page.evaluate(() => __bg.s); if(s.state === 'end') break; }
     const r = await page.evaluate(() => ({ crates:__bg.G.match.crates, power:__bg.G.fighters.reduce((a, f) => a + (f.gemsPicked || 0), 0), knock:__bg.G.fighters.filter(f => !f.alive).length }));

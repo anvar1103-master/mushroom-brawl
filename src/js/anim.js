@@ -207,7 +207,7 @@ export function animate(V, f, dt, t){
 
 // kicks for the springs, called from gameplay events
 export const kick = {
-  attack(V){ V.sp.kick.v += V.id === 'wasp' ? 9 : V.id === 'shroom' ? 13 : V.id === 'roly' ? 8 : 0; V.sp.bodyX.v -= 2.2; V.sp.headX.v -= 3; V.sp.ant.v += 3; },
+  attack(V){ V.sp.kick.v += V.id === 'wasp' ? 9 : V.id === 'shroom' ? 13 : V.id === 'roly' ? 8 : V.id === 'hopper' ? 3 : 0; V.sp.bodyX.v -= 2.2; V.sp.headX.v -= 3; V.sp.ant.v += 3; },
   super(V){ V.sp.kick.v += 22; V.sp.bodyX.v -= 5; V.sp.headX.v -= 6; V.sp.ant.v += 6; V.sp.squash.v += 3; },
   hurt(V, dx, dz){ V.sp.bodyX.v -= 5; V.sp.headX.v -= 7; V.sp.headZ.v += (Math.random() - 0.5) * 8; V.sp.squash.v -= 3; V.sp.ant.v += 5; },
   spawn(V){ V.sp.pop.x = 0.05; V.sp.pop.v = 0; },
