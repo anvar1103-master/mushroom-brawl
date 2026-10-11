@@ -171,6 +171,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .modal h2{margin:0 0 6px;font:900 30px/1 var(--font-display)}
 .end{background:linear-gradient(rgba(6,14,9,0),rgba(6,14,9,.6))}
 .end .card{width:min(94vw,560px);max-height:calc(100vh - 16px);overflow-y:auto}
+.end .btns{position:sticky;bottom:-12px;padding-bottom:4px;background:linear-gradient(transparent,var(--glass-2) 30%)}
 .board.br td{padding:3px 6px} .board.br svg{width:22px;height:22px} .board .pl{font:900 14px/1 var(--font-display);color:var(--ink-2);width:30px} .board tr.out td{opacity:.75}
 .end h1{margin:0;font:900 64px/1 var(--font-display);-webkit-text-stroke:2px rgba(0,0,0,.3);text-shadow:0 6px 0 rgba(0,0,0,.3)}
 .end h1.win{color:var(--sun)} .end h1.lose{color:#FF9C92} .end h1.draw{color:#D9EBD2}
@@ -228,6 +229,8 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
   .board.br{font-size:12px;margin:2px 0} .board.br td{padding:1px 5px} .board.br svg{width:18px;height:18px} .end .card{padding:12px;gap:6px}
 }
 @media (max-height:400px){
+  .end h1{font-size:32px} .end p{font-size:12px} .board.br{font-size:11px} .board.br td{padding:0 5px} .board.br svg{width:15px;height:15px}
+  .end .btns .play{padding:9px;font-size:18px} .end .btns .ghost{padding:9px}
   .mode-card small{display:none} .mode-card b{font-size:16px} .brand .logo{font-size:26px} .brand span{font-size:13px}
   .play{padding:10px;font-size:20px}
 }
