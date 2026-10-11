@@ -36,7 +36,7 @@ export function makeBolt(color, size, len, trail = true){
   }
   const M = mats(color), u = g.userData;
   u.glow.material = M.glow; u.tr.material = M.trail;
-  u.glow.scale.setScalar(size); u.len = len; u.w = size * 0.32; u.tr.visible = trail;
+  u.glow.scale.setScalar(size); u.len = len; u.w = size * 0.42; u.tr.visible = trail;
   u.tr.scale.set(0.001, 0.001, 0.001);
   g.visible = true; scene.add(g);
   return g;

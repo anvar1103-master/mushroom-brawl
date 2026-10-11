@@ -208,7 +208,7 @@ const glowMat = (c, k = 2.4) => matCache[c + k] || (matCache[c + k] = new THREE.
 function addShot(f, x, z, a, W, dmg, isSuper){
   // a glowing bolt with a trail; the stinger's is long and thin, pellets are short (and trail-less on phones)
   const needle = W.kind === 'needle', sz = W.size || 0.2;
-  const m = makeBolt(W.color, needle ? sz * 2.6 : sz * 2.2, needle ? 3.2 : isSuper ? 1.4 : 1.0, needle || !LOW);
+  const m = makeBolt(W.color, needle ? sz * 2.6 : sz * 2.2, needle ? 3.6 : isSuper ? 1.8 : 1.4, needle || !LOW);
   moveBolt(m, x, SHOT_Y, z, Math.sin(a), Math.cos(a), 0);
   G.shots.push({ owner:f, team:f.team, x, z, x0:f.x, z0:f.z, vx:Math.sin(a) * W.speed, vz:Math.cos(a) * W.speed, range:W.range, dist:0, dmg, W, isSuper, m, knock:W.knock || 0 });
 }
