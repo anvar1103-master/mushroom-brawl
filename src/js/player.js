@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { camera, canvas, scene } from './engine.js';
 import { G } from './state.js';
 import { $, clamp, angDiff, TOUCH, store, lerp } from './util.js';
-import { canAttack, canSee, SHOT_Y } from './combat.js';
+import { canAttack, canSee, SHOT_Y, bouncePath, pathHits } from './combat.js';
 import { segHit, A, tileAtXZ, tileHeight } from './arena.js';
 import { unlockAudio } from './audio.js';
 
@@ -142,8 +142,18 @@ export function autoTarget(sup){
     if(score < bs){ bs = score; best = o; }
   }
   if(!best) return null;
+  if(W.kind === 'bounce' && segHit(me.x, me.z, best.x, best.z) >= 0){ const b = bankShot(me, best, W); if(b) return { x:me.x + Math.sin(b) * 6, z:me.z + Math.cos(b) * 6, foe:best }; }
   const d = Math.hypot(best.x - me.x, best.z - me.z), tl = W.kind === 'lob' || W.kind === 'barrage' ? W.flight * 0.8 : d / (W.speed || 40);
   return { x:best.x + best.vx * tl * 0.7, z:best.z + best.vz * tl * 0.7, foe:best };
+}
+// a ricochet that reaches the target: try directions around it and keep the one whose path passes closest to straight
+export function bankShot(f, o, W){
+  const base = Math.atan2(o.x - f.x, o.z - f.z);
+  for(let i = 1; i <= 36; i++){
+    const a = base + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.17;
+    if(pathHits(bouncePath(f.x, f.z, a, W.range, W.bounces), o.x, o.z, o.H.rad + 0.1)) return a;
+  }
+  return null;
 }
 // where a weapon goes when fired at the crosshair: lobs land where the crosshair meets the ground
 function aimFor(me, sup){
@@ -252,7 +262,9 @@ export function updateGuide(){
   const sup = TOUCH ? !!T.sup : me && me.charge >= 1 && keys.KeyE;
   const W = me && (sup ? me.H.super : me.H.attack);
   const lob = W && (W.kind === 'lob' || W.kind === 'barrage');
+  if(show && W && W.kind === 'bounce') return bounceGuide(me, W, sup);
   guide.visible = !!(show && lob); if(!guide.visible) return;
+  gRing.visible = true; dots.forEach(d => { d.visible = true; });
   const mat = sup ? gSup : gMat; mat.opacity = canAttack(me) || sup ? 0.8 : 0.3;
   gRing.material = mat; dots.forEach(d => d.material = mat);
   const p = aimFor(me, sup), d = Math.hypot(p.x - me.x, p.z - me.z), h = 3.2 + d * 0.2;
@@ -260,3 +272,18 @@ export function updateGuide(){
   dots.forEach((dt, i) => { const k = (i + 1) / (dots.length + 1); dt.position.set(lerp(me.x, p.x, k), lerp(1.0, 0.15, k) + Math.sin(k * Math.PI) * h, lerp(me.z, p.z, k)); });
 }
 export const lobHeight = d => 3.2 + d * 0.2;
+// the ricochet guide: dots along the path the pebble will take, the ring hidden
+function bounceGuide(me, W, sup){
+  guide.visible = true; gRing.visible = false;
+  const mat = sup ? gSup : gMat; mat.opacity = canAttack(me) || sup ? 0.8 : 0.3; dots.forEach(d => d.material = mat);
+  const p = aimFor(me, sup), pts = bouncePath(me.x, me.z, Math.atan2(p.x - me.x, p.z - me.z), Math.min(W.range, 14), W.bounces);
+  let total = 0; for(let i = 1; i < pts.length; i++) total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+  const gap = Math.max(0.55, total / dots.length);
+  let seg = 1, along = 0, left = gap * 0.6;
+  for(const dt of dots){
+    while(seg < pts.length){ const a = pts[seg - 1], b = pts[seg], L = Math.hypot(b.x - a.x, b.z - a.z); if(along + left <= L){ along += left; break; } left -= L - along; along = 0; seg++; }
+    if(seg >= pts.length){ dt.visible = false; continue; }
+    const a = pts[seg - 1], b = pts[seg], L = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    dt.visible = true; dt.position.set(a.x + (b.x - a.x) * along / L, SHOT_Y, a.z + (b.z - a.z) * along / L); left = gap;
+  }
+}

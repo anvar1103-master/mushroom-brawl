@@ -20,6 +20,10 @@ export const EN = {
   'Жучиная бомба':'Beetle Bomb', 'Ковровая бомбёжка':'Carpet Bombing', 'пять бомб ложатся дорожкой':'five bombs land in a line',
   'Жало':'Stinger', 'Пронзающий луч':'Piercing Beam', 'луч прошивает стены и всех на пути':'a beam that goes through walls and everyone in its way',
   'спор веером':'spores in a fan', 'бомба через стены, горящая лужа':'a bomb over walls, a burning puddle', 'дальний выстрел, урон растёт с расстоянием':'a long shot, damage grows with distance',
+  'Катыш':'Rolly', 'мокрица':'woodlouse', 'Рикошет':'Ricochet', 'Скачущий катыш':'Bouncing Pebble', 'Большой катыш':'Big Roller',
+  'Рогатка стреляет скачущими катышами: они отлетают от кустов и достают врага за углом.':'A slingshot that fires bouncing pebbles: they ricochet off hedges and reach enemies around corners.',
+  'огромный шар долго скачет по коридорам и бьёт всех на пути':'a huge ball bounces through the corridors for a long time, hitting everyone in its way',
+  'отскакивает от кустов 2 раза, достаёт за углом':'bounces off hedges twice, reaches around corners',
   // battle
   'Супер':'Super', 'ПКМ · E':'RMB · E', 'Возрождение через':'Respawn in', 'Щёлкни по полю, чтобы управлять мышью':'Click the field to aim with the mouse',
   'Собери 10 спор и удержи их 15 секунд':'Collect 10 spores and hold them for 15 seconds', 'Ты':'You',

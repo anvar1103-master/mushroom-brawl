@@ -164,6 +164,11 @@ export function animate(V, f, dt, t){
       if(B.elyL){ B.elyL.rotation.z = open * 0.9; B.elyR.rotation.z = -open * 0.9; B.elyL.rotation.x = B.elyR.rotation.x = -open * 0.4; }
       B.armL.rotation.x = B.armR.rotation.x = -2.2 * open + (s > 0.15 && s < 0.6 ? Math.sin((s - 0.15) * 30) * 0.5 : 0);
       B.hips.position.y += Math.sin(Math.min(s / 0.5, 1) * Math.PI) * 0.35;
+    } else if(V.id === 'roly'){
+      // curls up into a ball for a moment while the big roller leaves the slingshot
+      const curl = s < 0.15 ? s / 0.15 : Math.max(0, 1 - (s - 0.15) / 0.35);
+      B.hips.rotation.x += curl * 0.9; B.head.rotation.x += curl * 0.7;
+      B.hips.position.y -= curl * 0.12; B.hips.scale.y *= 1 - curl * 0.15;
     } else if(V.id === 'wasp'){
       const W = H.super.windup;
       const rise = s < W ? s / W : Math.max(0, 1 - (s - W) / 0.5);
@@ -202,7 +207,7 @@ export function animate(V, f, dt, t){
 
 // kicks for the springs, called from gameplay events
 export const kick = {
-  attack(V){ V.sp.kick.v += V.id === 'wasp' ? 9 : V.id === 'shroom' ? 13 : 0; V.sp.bodyX.v -= 2.2; V.sp.headX.v -= 3; V.sp.ant.v += 3; },
+  attack(V){ V.sp.kick.v += V.id === 'wasp' ? 9 : V.id === 'shroom' ? 13 : V.id === 'roly' ? 8 : 0; V.sp.bodyX.v -= 2.2; V.sp.headX.v -= 3; V.sp.ant.v += 3; },
   super(V){ V.sp.kick.v += 22; V.sp.bodyX.v -= 5; V.sp.headX.v -= 6; V.sp.ant.v += 6; V.sp.squash.v += 3; },
   hurt(V, dx, dz){ V.sp.bodyX.v -= 5; V.sp.headX.v -= 7; V.sp.headZ.v += (Math.random() - 0.5) * 8; V.sp.squash.v -= 3; V.sp.ant.v += 5; },
   spawn(V){ V.sp.pop.x = 0.05; V.sp.pop.v = 0; },
