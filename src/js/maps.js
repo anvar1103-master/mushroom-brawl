@@ -49,7 +49,29 @@ const PUFF_PITCH = {
   ]
 };
 
-export const MAPS = { glade:build(SPORE_GLADE), maze:buildMaze(2718), pitch:build(PUFF_PITCH) };
+// «Тихие заводи»: two crescent backwaters on the flanks (shots fly over the water, feet don't), so the fight for the
+// spores runs through the middle; the mine sits in a ring of tall grass, narrow banks along the edges are the flanks
+const BACKWATERS = {
+  id:'creek', name:'Тихие заводи', desc:'Две заводи по бокам, грибница в высокой траве и узкие берега для обходов.', mode:'spores',
+  half:[
+    '"".....r.r.r.....""',
+    '"".......,.......""',
+    '....##.......##....',
+    '....#....T....#....',
+    '..R.............R..',
+    '"""....#####...."""',
+    '"""............."""',
+    '.....T.......T.....',
+    '..##.....R.....##..',
+    '.~...............~.',
+    '.~~~...' + '"""""' + '...~~~.',
+    '.~~~~...T.T...~~~~.',
+    '...~~~.......~~~...',
+    '.~~~..' + '""' + '.M.' + '""' + '..~~~.'
+  ]
+};
+
+export const MAPS = { glade:build(SPORE_GLADE), creek:build(BACKWATERS), maze:buildMaze(2718), pitch:build(PUFF_PITCH) };
 
 function build(def){
   const top = def.half;
