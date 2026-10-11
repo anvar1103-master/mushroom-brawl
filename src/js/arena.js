@@ -7,7 +7,7 @@ import { TILE, MAPS } from './maps.js';
 import { rand, pick, seeded, clamp, TAU, TOUCH } from './util.js';
 import { Q } from './engine.js';
 
-export const A = { map:null, W:0, H:0, rows:null, group:null, hx:0, hz:0, spawns:{ 0:[], 1:[] }, mine:{ x:0, z:0 }, grassTiles:[], shared:{} };
+export const A = { map:null, W:0, H:0, rows:null, group:null, hx:0, hz:0, spawns:{ 0:[], 1:[], ffa:[] }, mine:null, grassTiles:[], crates:[], shared:{} };
 export const U = { time:{ value:0 }, push:{ value:Array.from({ length:10 }, () => new THREE.Vector3(0, 0, 0)) }, me:{ value:new THREE.Vector3(0, 0, 0) } };
 
 // ---------------- tiles ----------------
@@ -17,8 +17,8 @@ export const colOf = x => Math.floor(x / TILE + A.W / 2);
 export const rowOf = z => Math.floor(z / TILE + A.H / 2);
 export function tileAt(c, r){ if(c < 0 || r < 0 || c >= A.W || r >= A.H) return 'X'; return A.rows[r][c]; }
 export const tileAtXZ = (x, z) => tileAt(colOf(x), rowOf(z));
-const MOVE_BLOCK = new Set(['#', 'R', 'T', '~', 'X']);
-const SHOT_BLOCK = new Set(['#', 'R', 'T', 'X']);
+const MOVE_BLOCK = new Set(['#', 'R', 'T', '~', 'X', 'C']);
+const SHOT_BLOCK = new Set(['#', 'R', 'T', 'X', 'C']);
 export const blocksMove = ch => MOVE_BLOCK.has(ch);
 export const blocksShot = ch => SHOT_BLOCK.has(ch);
 // tall hedges (and the fence) block the view; rocks and stumps are low enough to see over
@@ -26,7 +26,7 @@ const SIGHT_BLOCK = new Set(['#', 'X']);
 export const blocksSight = ch => SIGHT_BLOCK.has(ch);
 export const sightClear = (x0, z0, x1, z1) => segHit(x0, z0, x1, z1, blocksSight) < 0;
 // height of whatever stands on a tile (for aiming rays and the camera)
-export const tileHeight = ch => ch === '#' || ch === 'X' ? HEDGE_H : ch === 'R' ? 1.15 : ch === 'T' ? 0.9 : 0;
+export const tileHeight = ch => ch === '#' || ch === 'X' ? HEDGE_H : ch === 'R' ? 1.15 : ch === 'C' ? 1.1 : ch === 'T' ? 0.9 : 0;
 export const inGrass = (x, z) => tileAtXZ(x, z) === '"';
 
 // push a circle out of every blocked tile it overlaps
@@ -191,7 +191,8 @@ function triplanar(mat, scale){
 
 // rounded, lumpy box: the base shape of every hedge
 function hedgeGeo(sx, sy, sz, seed){
-  const res = 2.2, rad = 0.32;
+  // big maps (the royale maze) have four times the hedges: fewer segments per metre keeps the triangle count in check
+  const big = A.W * A.H > 700, res = big ? (LOW ? 1.2 : 1.5) : (LOW ? 1.7 : 2.2), rad = 0.32;
   let g = new THREE.BoxGeometry(sx, sy, sz, Math.ceil(sx * res), Math.ceil(sy * res), Math.ceil(sz * res));
   g.deleteAttribute('normal'); g.deleteAttribute('uv');
   g = mergeVertices(g);
@@ -249,7 +250,7 @@ function instanceModel(name, list, matFor, opt = {}){
 export function buildArena(id){
   if(A.group){ scene.remove(A.group); A.group.traverse(o => { if(o.geometry && !o.userData.shared) o.geometry.dispose(); }); }
   const map = MAPS[id];
-  Object.assign(A, { map, W:map.W, H:map.H, rows:map.rows, hx:map.W * TILE / 2, hz:map.H * TILE / 2, spawns:{ 0:[], 1:[] }, grassTiles:[] });
+  Object.assign(A, { map, W:map.W, H:map.H, rows:map.rows.map(r => [...r]), hx:map.W * TILE / 2, hz:map.H * TILE / 2, spawns:{ 0:[], 1:[], ffa:[] }, grassTiles:[], crates:[], mine:null });
   A.group = new THREE.Group(); scene.add(A.group);
   fitShadow(A.hx + 2, A.hz + 2);
   for(let r = 0; r < A.H; r++) for(let c = 0; c < A.W; c++){
@@ -258,9 +259,12 @@ export function buildArena(id){
     if(ch === 'b') A.spawns[0].push({ x:tileX(c), z:tileZ(r) - 3.2 });
     if(ch === 'r') A.spawns[1].push({ x:tileX(c), z:tileZ(r) + 3.2 });
     if(ch === 'M') A.mine = { x:tileX(c), z:tileZ(r) };
+    // battle royale spawns: a step in from the fence, toward the middle
+    if(ch === 's'){ const x = tileX(c), z = tileZ(r), d = Math.hypot(x, z) || 1; A.spawns.ffa.push({ x:x - x / d * 1.0, z:z - z / d * 1.0 }); }
     if(ch === '"') A.grassTiles.push([c, r]);
   }
-  seeded(7331, () => { buildGround(); buildHedges(); buildCover(); buildGrass(); buildWater(); buildDecor(); buildOutside(); });
+  if(!A.spawns[0].length) A.spawns[0] = A.spawns[1] = A.spawns.ffa;
+  seeded(7331, () => { buildGround(); buildHedges(); buildCover(); buildCrates(); buildGrass(); buildWater(); buildDecor(); buildOutside(); });
   return A;
 }
 
@@ -276,7 +280,7 @@ function buildGround(){
     for(let r = 0; r < A.H; r++) for(let c = 0; c < A.W; c++){
       const ch = A.rows[r][c], x = (c + 0.5) * S, y = (r + 0.5) * S;
       if(ch === 'M') dirt(x, y, S * 2.6);
-      if(ch === 'b' || ch === 'r') dirt(x, y, S * 1.1);
+      if(ch === 'b' || ch === 'r' || ch === 's') dirt(x, y, S * 1.1);
     }
     // grass speckles and blades
     for(let i = 0; i < W * H / 60; i++){
@@ -296,8 +300,8 @@ function buildGround(){
     g.filter = 'none';
     // spawn pads in team colours
     for(let r = 0; r < A.H; r++) for(let c = 0; c < A.W; c++){
-      const ch = A.rows[r][c]; if(ch !== 'b' && ch !== 'r') continue;
-      g.strokeStyle = ch === 'b' ? 'rgba(80,190,255,.85)' : 'rgba(255,90,90,.85)'; g.lineWidth = 4;
+      const ch = A.rows[r][c]; if(ch !== 'b' && ch !== 'r' && ch !== 's') continue;
+      g.strokeStyle = ch === 'b' ? 'rgba(80,190,255,.85)' : ch === 'r' ? 'rgba(255,90,90,.85)' : 'rgba(255,215,90,.8)'; g.lineWidth = 4;
       g.beginPath(); g.arc((c + 0.5) * S, (r + 0.5) * S, S * 0.38, 0, TAU); g.stroke();
     }
   });
@@ -371,6 +375,57 @@ function leafMat(color){
     A.shared[key] = windify(stdMat({ map, color, alphaTest:0.45, side:THREE.DoubleSide, roughness:0.8 }), 1.6, 0.05, false);
   }
   return A.shared[key];
+}
+
+// ---------------- crates: cover that breaks and drops a power spore ----------------
+export const CRATE_HP = 3000;
+let crateMesh = null;
+const crateDummy = new THREE.Object3D();
+function crateGeo(){
+  const g = new THREE.BoxGeometry(1.3, 1.1, 1.3); g.translate(0, 0.55, 0);
+  return g;
+}
+function crateTex(){
+  return canvasTex(128, 128, (g, w, h) => {
+    g.fillStyle = '#9A6B3C'; g.fillRect(0, 0, w, h);
+    for(let i = 0; i < 4; i++){ g.fillStyle = i % 2 ? '#8A5E33' : '#A87645'; g.fillRect(0, i * 32 + 2, w, 28); }
+    g.strokeStyle = '#5E3D1E'; g.lineWidth = 8; g.strokeRect(4, 4, w - 8, h - 8);
+    g.beginPath(); g.moveTo(8, 8); g.lineTo(w - 8, h - 8); g.stroke();
+    // a glowing spore mark tells what's inside
+    g.fillStyle = '#FFD45A'; g.beginPath(); g.arc(w / 2, h / 2, 15, 0, TAU); g.fill();
+    g.fillStyle = '#FFF4C0'; g.beginPath(); g.arc(w / 2 - 4, h / 2 - 4, 5, 0, TAU); g.fill();
+  });
+}
+function buildCrates(){
+  A.crates = [];
+  for(let r = 0; r < A.H; r++) for(let c = 0; c < A.W; c++) if(A.rows[r][c] === 'C') A.crates.push({ c, r, x:tileX(c), z:tileZ(r), hp:CRATE_HP, shake:0, rot:Math.floor(rand(0, 4)) * Math.PI / 2, alive:true });
+  if(!A.crates.length){ crateMesh = null; return; }
+  crateMesh = new THREE.InstancedMesh(crateGeo(), stdMat({ map:crateTex(), roughness:0.85 }), A.crates.length);
+  crateMesh.castShadow = crateMesh.receiveShadow = true;
+  A.crates.forEach((k, i) => { k.i = i; placeCrate(k); });
+  A.group.add(crateMesh);
+}
+function placeCrate(k){
+  const s = k.alive ? 1 : 0, j = k.shake > 0 ? Math.sin(k.shake * 60) * 0.06 * k.shake / 0.2 : 0;
+  crateDummy.position.set(k.x + j, 0, k.z); crateDummy.rotation.set(0, k.rot + j, 0); crateDummy.scale.set(s, s * (1 - j * 0.5), s);
+  crateDummy.updateMatrix(); crateMesh.setMatrixAt(k.i, crateDummy.matrix); crateMesh.instanceMatrix.needsUpdate = true;
+}
+export const crateAt = (c, r) => A.crates.find(k => k.alive && k.c === c && k.r === r) || null;
+// returns true when the crate breaks
+export function hitCrate(k, dmg){
+  if(!k || !k.alive) return false;
+  k.hp -= dmg; k.shake = 0.2;
+  if(k.hp <= 0){ k.alive = false; A.rows[k.r][k.c] = '.'; placeCrate(k); return true; }
+  placeCrate(k); return false;
+}
+// a new match on the same map: every crate stands again
+export function resetCrates(){
+  if(!crateMesh) return;
+  for(const k of A.crates){ k.alive = true; k.hp = CRATE_HP; k.shake = 0; A.rows[k.r][k.c] = 'C'; placeCrate(k); }
+}
+export function updateCrates(dt){
+  if(!crateMesh) return;
+  for(const k of A.crates) if(k.shake > 0){ k.shake = Math.max(0, k.shake - dt); placeCrate(k); }
 }
 
 function buildCover(){

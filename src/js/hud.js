@@ -8,7 +8,8 @@ import { lookFor, spotted } from './combat.js';
 import { AIM } from './player.js';
 import { sightClear } from './arena.js';
 import { SPORES } from './mode.js';
-import { tr } from './i18n.js';
+import { tr, L } from './i18n.js';
+import { ROYALE } from './royale.js';
 
 const V3 = new THREE.Vector3();
 const gem = '<span class="gem-ico"></span>';
@@ -37,7 +38,8 @@ export function updateTags(){
     if(T.last.sp !== sp){ T.el.classList.toggle('spotted', sp); T.last.sp = sp; }
     const hp = Math.max(0, Math.ceil(f.hp)), pct = (hp / f.max * 100).toFixed(1) + '%';
     if(T.last.hp !== hp){ T.u.style.width = pct; T.s.style.width = pct; T.b.textContent = hp; T.last.hp = hp; }
-    if(T.last.gems !== f.gems){ T.gm.hidden = !f.gems; T.gmb.textContent = f.gems; T.last.gems = f.gems; }
+    const gm = G.match && G.match.mode === 'br' ? f.power || 0 : f.gems;
+    if(T.last.gems !== gm){ T.gm.hidden = !gm; T.gmb.textContent = gm; T.last.gems = gm; }
     const ready = f.charge >= 1;
     if(T.last.ready !== ready){ T.el.classList.toggle('ready', ready); T.last.ready = ready; }
     if(T.am.length) T.am.forEach((el, i) => { const k = clamp(f.ammo - i, 0, 1); el.firstChild.style.width = (k * 100).toFixed(0) + '%'; el.classList.toggle('full', k >= 1); });
@@ -49,11 +51,19 @@ const fmt = t => { t = Math.max(0, Math.ceil(t)); return Math.floor(t / 60) + ':
 let lastCd = null;
 export function updateHud(){
   const M = G.match, me = G.me; if(!M || !me) return;
-  const mt = me.team;
-  $('sc0').textContent = M.count[mt]; $('sc1').textContent = M.count[1 - mt];
-  $('timer').textContent = fmt(M.dur - M.t);
+  const mt = me.team, br = M.mode === 'br';
+  if(br){
+    // fighters left · time until the fog moves (or the fog label while it closes in) · your power
+    setText('sc0', M.alive); setText('sc1', me.power || 0);
+    const wait = ROYALE.wait - M.t;
+    setText('timer', wait > 0 ? fmt(wait) : '☁');
+    setText('mode-lbl', tr(wait > 0 ? 'Туман' : M.fog.r > ROYALE.r1 ? 'Туман идёт' : 'Финал'));
+  } else {
+    setText('sc0', M.count[mt]); setText('sc1', M.count[1 - mt]);
+    setText('timer', fmt(M.dur - M.t)); setText('mode-lbl', tr('Споры'));
+  }
   const cd = $('cdown');
-  if(M.cd && !M.over){
+  if(M.cd && !M.over && !br){
     cd.hidden = false; const ours = M.cd.team === mt, n = Math.ceil(M.cd.t);
     cd.classList.toggle('foe', !ours);
     if(n !== lastCd){ $('cd-n').textContent = n; cd.classList.remove('pulse'); void cd.offsetWidth; cd.classList.add('pulse'); lastCd = n; }
@@ -77,8 +87,10 @@ export function updateHud(){
   xh.hidden = !me.alive;
   // respawn
   const dead = $('dead');
-  if(!me.alive && !M.over){ dead.hidden = false; $('dead-n').textContent = Math.max(1, Math.ceil(me.respawnT)); } else dead.hidden = true;
+  if(!me.alive && !M.over && M.respawn){ dead.hidden = false; $('dead-n').textContent = Math.max(1, Math.ceil(me.respawnT)); } else dead.hidden = true;
 }
+const txt = {};
+function setText(id, v){ v = String(v); if(txt[id] !== v){ txt[id] = v; $(id).textContent = v; } }
 // the attack button doubles as the ammo gauge: three arcs around it
 function touchAmmo(me){
   if(!TOUCH) return;
@@ -131,6 +143,8 @@ function attackText(W){
 // ---------------- end of match ----------------
 export function showEnd(result){
   const me = G.me, M = G.match;
+  if(M.mode === 'br') return showEndRoyale(result);
+  $('e-board').classList.remove('br');
   const t = $('e-title');
   t.textContent = tr(result === 'win' ? 'Победа!' : result === 'lose' ? 'Поражение' : 'Ничья');
   t.className = result;
@@ -140,5 +154,20 @@ export function showEnd(result){
   const mvp = [...G.fighters].sort((a, b) => score(b) - score(a))[0];
   const rows = [...G.fighters].sort((a, b) => (a.team === me.team ? 0 : 1) - (b.team === me.team ? 0 : 1) || score(b) - score(a));
   $('e-board').innerHTML = rows.map(f => `<tr class="t${f.team === me.team ? 0 : 1}${f === me ? ' me' : ''}"><td>${ICONS[f.hero]}</td><td>${esc(f.name)}${f === mvp ? '<span class="mvp">MVP</span>' : ''}</td><td>⚔ ${f.kills}</td><td>☠ ${f.deaths}</td><td>${gem} ${f.gemsPicked || 0}</td><td>${Math.round(f.dmgDone)}</td></tr>`).join('');
+  $('end').hidden = false;
+}
+
+// «Последний гриб»: your place, who got you, and everyone ordered by how long they lasted
+function showEndRoyale(result){
+  const me = G.me, M = G.match, t = $('e-title');
+  const place = n => L.lang === 'en' ? '#' + n + ' place' : '#' + n + ' место';
+  t.textContent = result === 'win' ? tr('Победа!') : place(M.place);
+  t.className = M.place <= 3 ? 'win' : 'lose';
+  const k = me.lastHitBy;
+  $('e-sub').textContent = result === 'win' ? tr('Ты — последний гриб!') : k && k !== me ? tr('Тебя срезал: ') + k.name : tr('Тебя накрыл ядовитый туман.');
+  const rows = [...G.fighters].sort((a, b) => (a.place || 0) - (b.place || 0) || b.kills - a.kills);
+  const pw = '<span class="gem-ico gold"></span>';
+  $('e-board').classList.add('br');
+  $('e-board').innerHTML = rows.map(f => `<tr class="t${f === me ? 0 : 1}${f === me ? ' me' : ''}${f.alive ? '' : ' out'}"><td class="pl">${f.place ? '#' + f.place : '—'}</td><td>${ICONS[f.hero]}</td><td>${esc(f.name)}</td><td>⚔ ${f.kills}</td><td>${pw} ${f.power || 0}</td><td>${Math.round(f.dmgDone)}</td></tr>`).join('');
   $('end').hidden = false;
 }

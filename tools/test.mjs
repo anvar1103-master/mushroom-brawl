@@ -2,7 +2,7 @@
 //   node tools/test.mjs          — tests the source (src/)
 //   node tools/test.mjs --dist   — tests the release build (dist/web, run npm run build first)
 // It serves the repo on a local port, blocks every outside request, then:
-//   loads the game, plays one bot match per hero to the end, checks the English screen has no Russian left.
+//   loads the game, plays one bot match per hero to the end, two royale matches, checks the English screen has no Russian left.
 import http from 'http'; import fs from 'fs'; import path from 'path';
 import { chromium } from 'playwright';
 
@@ -41,6 +41,14 @@ console.log('Brawl Green test:', PAGE);
     ok(s.state === 'end' && s.t <= 196, `${hero}: bot match ends (${s.why}, ${s.t} s, spores ${s.count.join(':')}, ${kills} knockouts)`);
     ok(kills > 0, `${hero}: fighters actually fight`);
   }
+  // «Последний гриб»: ten fighters, fog, crates; the match ends when you fall or are the last one left
+  for(const hero of ['beetle', 'wasp']){
+    await page.evaluate(h => { __bg.start({ mode:'br', hero:h, skipCount:true }); __bg.autopilot(true); }, hero);
+    let s; for(let i = 0; i < 60; i++){ await page.evaluate(() => __bg.sim(5)); s = await page.evaluate(() => __bg.s); if(s.state === 'end') break; }
+    const r = await page.evaluate(() => ({ crates:__bg.G.match.crates, power:__bg.G.fighters.reduce((a, f) => a + (f.gemsPicked || 0), 0), knock:__bg.G.fighters.filter(f => !f.alive).length }));
+    ok(s.state === 'end' && s.mode === 'br' && s.place >= 1, `${hero}: royale ends (#${s.place}, ${s.t} s, fog ${s.fog} m, ${r.knock} knocked out, ${r.crates} crates, ${r.power} power picked)`);
+    ok(r.crates > 0 && r.power > 0, `${hero}: crates break and drop power`);
+  }
   ok(errors.length === 0, 'no script errors' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
   ok(outside.length === 0, 'no requests to other sites' + (outside.length ? ': ' + outside.slice(0, 3).join(', ') : ''));
   await ctx.close();
@@ -50,6 +58,10 @@ console.log('Brawl Green test:', PAGE);
   const cyr = () => page.evaluate(() => { const out = new Set(); const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); let n; while((n = w.nextNode())){ const el = n.parentElement; if(!el || el.closest('[hidden]') || getComputedStyle(el).display === 'none') continue; if(/[А-Яа-яЁё]/.test(n.nodeValue)) out.add(n.nodeValue.trim()); } return [...out]; });
   let left = await cyr();
   await page.evaluate(() => { __bg.start({ hero:'beetle', skipCount:true }); __bg.autopilot(true); __bg.sim(20); });
+  left = left.concat(await cyr());
+  await page.evaluate(() => { __bg.showMenu(); __bg.start({ mode:'br', hero:'shroom', skipCount:true }); __bg.autopilot(true); __bg.sim(30); });
+  left = left.concat(await cyr());
+  await page.evaluate(() => { __bg.sim(200); __bg.sim(4); });
   left = left.concat(await cyr());
   ok(left.length === 0, 'English: no Russian text on screen' + (left.length ? ': ' + left.slice(0, 5).join(' | ') : ''));
   await ctx.close();

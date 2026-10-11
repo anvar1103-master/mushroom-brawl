@@ -8,6 +8,7 @@ import { collide, segHit, inGrass, A, blocksMove, tileAtXZ, sightClear } from '.
 import { glow, smoke, puff, explosion, hitSpark, sporeBurst, dmgNumber, dust, ring } from './fx.js';
 import { clamp, rand, TAU, lerp } from './util.js';
 import { sfx } from './audio.js';
+import { damageCrateAt, damageCratesIn, damageCrate } from './royale.js';
 
 export const SHOT_Y = 0.75;
 export const REGEN_DELAY = 3, REGEN_RATE = 0.13;
@@ -23,7 +24,7 @@ export function makeFighter(o){
     atkT:9, supT:9, flash:0, stunT:0, revealT:0, inGrass:false, gems:0, kills:0, deaths:0, dmgDone:0, lastHitBy:null,
     pendingBeam:null, inp:newInput(), V:null, tag:null, victory:false, defeat:false };
   // levels add a little power (progression): +5% hp and damage per level above 1
-  f.pow = 1 + (f.level - 1) * 0.05;
+  f.pow = f.pow0 = 1 + (f.level - 1) * 0.05;
   f.max = f.hp = Math.round(H.hp * f.pow);
   f.V = makeVisual(o.hero); f.V.root.visible = false; scene.add(f.V.root);
   G.fighters.push(f);
@@ -36,11 +37,13 @@ export function removeFighters(){
 export function lookFor(f){ return f === G.me ? 'me' : G.me && f.team === G.me.team ? 'ally' : 'foe'; }
 
 export function spawn(f, at){
-  const list = A.spawns[f.team];
+  const list = A.spawns[f.team] || A.spawns.ffa;
   const p = at || list[(f.slot ?? 0) % list.length];
+  if(!at){ f.power = 0; f.pow = f.pow0; f.max = Math.round(f.H.hp * f.pow0); }
   f.x = p.x; f.z = p.z; f.vx = f.vz = f.kx = f.kz = 0;
   f.alive = true; f.hp = f.max; f.ammo = AMMO; f.cdT = 0; f.deadT = 0; f.spawnT = 0; f.shieldT = SPAWN_SHIELD; f.regenT = 0;
-  f.aim = f.team === 0 ? Math.PI : 0; f.V.yaw = f.aim; f.atkT = f.supT = 9; f.spot = [0, 0]; f.pendingBeam = null; f.stunT = 0; f.gems = 0;
+  // face the enemy side (or the middle of the map when everyone is on their own)
+  f.aim = A.spawns[f.team] ? (f.team === 0 ? Math.PI : 0) : openYaw(f.x, f.z); f.V.yaw = f.aim; f.atkT = f.supT = 9; f.spot = {}; f.pendingBeam = null; f.stunT = 0; f.gems = 0;
   f.V.root.visible = true; f.V.root.scale.setScalar(1);
   setTeamLook(f.V, lookFor(f));
   kick.spawn(f.V);
@@ -50,17 +53,30 @@ export function spawn(f, at){
   emit('spawn', f);
 }
 
+// in the maze: face down the most open corridor that leads roughly toward the middle
+function openYaw(x, z){
+  const mid = Math.atan2(-x, -z); let best = mid, bs = -1e9;
+  for(let i = 0; i < 8; i++){
+    const a = i * Math.PI / 4, t = segHit(x, z, x + Math.sin(a) * 8, z + Math.cos(a) * 8), len = t < 0 ? 8 : t * 8;
+    const sc = len + Math.cos(a - mid) * 3;
+    if(sc > bs){ bs = sc; best = a; }
+  }
+  return best;
+}
+
 // ---------------- visibility: tall grass hides you unless an enemy is close, or you just attacked or got hit ----------------
 export const REVEAL_R = 3.2;
 // seeing through hedges: an outline within SEE_R, any distance once a teammate has hit (spotted) the enemy
-export const SEE_R = 10, SPOT_T = 3.5;
+// in the maze of «Последний гриб» the hedges hide more: you only sense fighters right behind them
+export const SEE_R = 10, SEE_R_BR = 6.5, SPOT_T = 3.5;
 export const spotted = (team, f) => f.spot && f.spot[team] > 0;
 export function canSee(viewer, f){
   if(f.team === viewer.team) return true;
   if(!visibleTo(viewer.team, f)) return false;
   if(spotted(viewer.team, f)) return true;
   const dx = f.x - viewer.x, dz = f.z - viewer.z;
-  return dx * dx + dz * dz < SEE_R * SEE_R || sightClear(viewer.x, viewer.z, f.x, f.z);
+  const r = G.match && G.match.mode === 'br' ? SEE_R_BR : SEE_R;
+  return dx * dx + dz * dz < r * r || sightClear(viewer.x, viewer.z, f.x, f.z);
 }
 export function visibleTo(team, f){
   if(f.team === team) return true;
@@ -203,7 +219,12 @@ export function updateShots(dt){
     let nx = s.x + s.vx * dt, nz = s.z + s.vz * dt, end = false;
     if(s.dist + step >= s.range){ const k = (s.range - s.dist) / step; nx = s.x + s.vx * dt * k; nz = s.z + s.vz * dt * k; end = true; }
     const wall = segHit(s.x, s.z, nx, nz);
-    if(wall >= 0){ nx = s.x + (nx - s.x) * wall; nz = s.z + (nz - s.z) * wall; end = true; hitSpark(nx, SHOT_Y, nz, s.W.color); sfx('hit_wall', { x:nx, z:nz }, 0.35); }
+    if(wall >= 0){
+      nx = s.x + (nx - s.x) * wall; nz = s.z + (nz - s.z) * wall; end = true; hitSpark(nx, SHOT_Y, nz, s.W.color); sfx('hit_wall', { x:nx, z:nz }, 0.35);
+      // a crate takes the hit (look a hair past the point where the shot stopped)
+      const l = Math.hypot(s.vx, s.vz) || 1;
+      damageCrateAt(nx + s.vx / l * 0.08, nz + s.vz / l * 0.08, s.W.dmgFar ? lerp(s.dmg, s.W.dmgFar * s.owner.pow, clamp(s.dist / s.range, 0, 1)) : s.dmg);
+    }
     // fighters along the path
     for(const o of G.fighters){
       if(!o.alive || o.team === s.team) continue;
@@ -265,6 +286,7 @@ function blast(owner, x, z, W, isSuper){
     damage(o, W.dmg * owner.pow, owner, isSuper);
     if(W.knock){ const l = d || 1; o.kx += (o.x - x) / l * W.knock * 3; o.kz += (o.z - z) / l * W.knock * 3; o.stunT = Math.max(o.stunT, 0.3); }
   }
+  damageCratesIn(x, z, W.radius, W.dmg * owner.pow);
   if(W.puddle) addPuddle(owner, x, z, W.puddle);
 }
 
@@ -317,6 +339,7 @@ function fireBeam(f){
     const r = S.width / 2 + o.H.rad;
     if(segPointDist2(x0, z0, x1, z1, o.x, o.z) < r * r){ damage(o, S.dmg * f.pow, f, true); o.kx += Math.sin(aim) * 6; o.kz += Math.cos(aim) * 6; hitSpark(o.x, SHOT_Y, o.z, S.color); }
   }
+  for(const k of A.crates) if(k.alive && segPointDist2(x0, z0, x1, z1, k.x, k.z) < (S.width / 2 + 0.7) ** 2) damageCrate(k, S.dmg * f.pow);
   const core = new THREE.Mesh(beamGeo, glowMat('#FFF6C0', 3)), outer = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color:new THREE.Color(S.color).multiplyScalar(2), transparent:true, opacity:0.55, depthWrite:false, blending:THREE.AdditiveBlending }));
   for(const m of [core, outer]){ m.position.set(x0, SHOT_Y + 0.05, z0); m.rotation.y = aim; scene.add(m); }
   core.scale.set(0.08, 0.08, S.range); outer.scale.set(S.width * 0.5, S.width * 0.5, S.range);
@@ -342,7 +365,7 @@ export function damage(o, amount, src, isSuper, quiet){
   if(!o.alive || o.shieldT > 0 || amount <= 0 || (G.match && G.match.over)) return 0;
   amount = Math.round(amount);
   o.hp -= amount; o.flash = 1; o.regenT = 0; o.revealT = Math.max(o.revealT, 0.6); o.lastHitBy = src;
-  if(src && src.team !== o.team){ o.spot = o.spot || [0, 0]; o.spot[src.team] = SPOT_T; }
+  if(src && src.team !== o.team){ o.spot = o.spot || {}; o.spot[src.team] = SPOT_T; }
   if(src){
     src.dmgDone += amount; src.regenT = Math.min(src.regenT, REGEN_DELAY * 0.5);
     if(!isSuper && src.charge < 1){ src.charge = Math.min(1, src.charge + amount / src.H.super.charge); if(src.charge >= 1) emit('superReady', src); }
@@ -366,7 +389,7 @@ export function updateFighterVisuals(dt, t){
   const meTeam = G.me ? G.me.team : 0;
   for(const f of G.fighters){
     const V = f.V;
-    if(f.spot){ f.spot[0] = Math.max(0, f.spot[0] - dt); f.spot[1] = Math.max(0, f.spot[1] - dt); }
+    if(f.spot) for(const k in f.spot) f.spot[k] = Math.max(0, f.spot[k] - dt);
     f.seen = G.me ? canSee(G.me, f) : true;
     animate(V, f, dt, t);
     if(f.alive && !f.seen) V.root.visible = false;
