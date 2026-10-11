@@ -5,7 +5,7 @@ import { G } from './state.js';
 import { $, esc, TOUCH, clamp, store } from './util.js';
 import { HEROES, HERO_IDS, ICONS, AMMO } from './heroes.js';
 import { lookFor, spotted } from './combat.js';
-import { AIM } from './player.js';
+import { AIM, CAM } from './player.js';
 import { sightClear } from './arena.js';
 import { SPORES } from './mode.js';
 import { tr, L } from './i18n.js';
@@ -80,6 +80,11 @@ export function updateHud(){
   for(let i = 0; i < segs.length; i++){ const a = clamp(me.ammo - i, 0, 1); segs[i].firstChild.style.width = (a * 100).toFixed(0) + '%'; segs[i].classList.toggle('full', a >= 1); }
   touchAmmo(me);
   const hp = Math.max(0, Math.ceil(me.hp)), hk = hp + '/' + me.id; if(updateHud.hp !== hk){ updateHud.hp = hk; $('mehp').firstChild.style.width = (hp / me.max * 100).toFixed(1) + '%'; $('mehp').lastChild.textContent = hp; }
+  // the sniper scope overlay with its charge ring
+  const SC = me.H.attack.scope, sc = $('scope');
+  const on = !!SC && CAM.zoom > 0.5 && me.alive;
+  if(sc.hidden === on) sc.hidden = !on;
+  if(on){ const k = clamp((me.scopeT || 0) / SC.time, 0, 1), kk = k.toFixed(2); if(sc._k !== kk){ sc._k = kk; sc.style.setProperty('--k', kk); sc.classList.toggle('full', k >= 1); setText('sc-hint', tr(k >= 1 ? 'Заряжено!' : 'Прицел')); } }
   // crosshair: red on an enemy in range, pale red when out of range, dim with no charges
   const xc = AIM.foe ? (AIM.inRange ? 'foe' : 'far') : '';
   const xk = 'xhair ' + xc + (me.ammo < 1 ? ' empty' : '') + (me.H.attack.kind === 'lob' ? ' lob' : '');

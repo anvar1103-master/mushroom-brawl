@@ -44,7 +44,7 @@ export function spawn(f, at){
   f.x = p.x; f.z = p.z; f.vx = f.vz = f.kx = f.kz = 0;
   f.alive = true; f.hp = f.max; f.ammo = AMMO; f.cdT = 0; f.deadT = 0; f.spawnT = 0; f.shieldT = SPAWN_SHIELD; f.regenT = 0;
   // face the enemy side (or the middle of the map when everyone is on their own)
-  f.aim = A.spawns[f.team] ? (f.team === 0 ? Math.PI : 0) : openYaw(f.x, f.z); f.V.yaw = f.aim; f.inp.aim = f.aim; f.atkT = f.supT = 9; f.spot = {}; f.pendingBeam = null; f.stunT = 0; f.gems = 0; f.burst = null; f.frenzyT = 0; f.bloom = 0;
+  f.aim = A.spawns[f.team] ? (f.team === 0 ? Math.PI : 0) : openYaw(f.x, f.z); f.V.yaw = f.aim; f.inp.aim = f.aim; f.atkT = f.supT = 9; f.spot = {}; f.pendingBeam = null; f.stunT = 0; f.gems = 0; f.scope = false; f.scopeT = 0; f.burst = null; f.frenzyT = 0; f.bloom = 0;
   f.V.root.visible = true; f.V.root.scale.setScalar(1);
   setTeamLook(f.V, lookFor(f));
   kick.spawn(f.V);
@@ -108,7 +108,10 @@ export function stepFighter(f, dt){
   // movement with a short acceleration ramp
   const frozen = G.state !== 'play' || f.stunT > 0 || f.pendingBeam;
   let mx = frozen ? 0 : inp.mx, mz = frozen ? 0 : inp.mz; const ml = Math.hypot(mx, mz); if(ml > 1){ mx /= ml; mz /= ml; }
-  const sp = H.speed * (G.ball && G.ball.holder === f ? 0.9 : 1);   // the ball carrier is a touch slower, so defenders can catch up
+  // the sniper's scope: charges while held, slows the steps
+  const SC = H.attack.scope;
+  if(SC && f.scope && G.state === 'play') f.scopeT = (f.scopeT || 0) + dt; else f.scopeT = 0;
+  const sp = H.speed * (G.ball && G.ball.holder === f ? 0.9 : 1) * (SC && f.scope ? SC.slow : 1);   // the ball carrier is a touch slower, so defenders can catch up
   const a = 1 - Math.exp(-dt * 18);
   f.vx += (mx * sp - f.vx) * a; f.vz += (mz * sp - f.vz) * a;
   const kd = Math.exp(-dt * 7); f.kx *= kd; f.kz *= kd;
@@ -205,7 +208,13 @@ function fireWeapon(f, W, aim, tx, tz, isSuper){
     if(isSuper){ f.kx -= Math.sin(aim) * 4; f.kz -= Math.cos(aim) * 4; G.shake = Math.max(G.shake, f.isMe ? 0.35 : 0); }
     sfx(isSuper ? 'boom' : 'shot_pop', f, isSuper ? 0.7 : 1);
   } else if(W.kind === 'needle'){
-    addShot(f, MZ.x, MZ.z, aim, W, W.dmg * pow, isSuper);
+    const SC = W.scope, k = SC && f.scope ? clamp(f.scopeT / SC.time, 0, 1) : 0;
+    if(SC && f.scope){
+      // an aimed shot: up to +60% damage once fully charged, further and faster; the charge starts over
+      const m = 1 + SC.dmg * k, sw = Object.assign({}, W, { range:W.range * SC.range, speed:W.speed * SC.speed, dmgFar:W.dmgFar * m, size:W.size * (1 + k * 0.5) });
+      addShot(f, MZ.x, MZ.z, aim, sw, W.dmg * m * pow, isSuper);
+      f.scopeT = 0; if(k >= 1){ flashAt(MZ.x, MZ.y, MZ.z, '#FFF2A0', 1.3, 0.1); sfx('shot_beam', f, 0.5, 1.4); }
+    } else addShot(f, MZ.x, MZ.z, aim, W, W.dmg * pow, isSuper);
     flashAt(MZ.x, MZ.y, MZ.z, W.color, 0.7, 0.07);
     puff(glow, MZ.x, MZ.y, MZ.z, { n:6, color:W.color, sp:3, life:0.18, s0:0.3, s1:0.05, drag:6 });
     sfx('shot_beam', f, 0.6);

@@ -24,8 +24,9 @@ export const HEROES = {
   },
   wasp:{
     name:'Жалка', species:'оса', role:'Снайпер', color:'#F5C21B', hp:2500, speed:5.2, rad:0.4, height:1.45, hover:0.22,
-    desc:'Дальнобойное жало: чем дальше цель, тем больнее.',
-    attack:{ kind:'needle', name:'Жало', range:15, speed:40, dmg:900, dmgFar:1650, reload:1.9, cd:0.5, size:0.16, color:'#FFB21E' },
+    desc:'Дальнобойное жало: чем дальше цель, тем больнее. Прицел приближает, а выстрел из прицела заряжается до +60% урона.',
+    // scope: hold to aim down the sight (zoom, slower steps); the shot charges up to +60% damage, flies further and faster
+    attack:{ kind:'needle', name:'Жало', range:15, speed:40, dmg:900, dmgFar:1650, reload:1.9, cd:0.5, size:0.16, color:'#FFB21E', scope:{ time:1.1, dmg:0.6, range:1.35, speed:1.3, slow:0.5 } },
     super:{ kind:'beam', name:'Пронзающий луч', desc:'луч прошивает стены и всех на пути', range:21, width:0.75, dmg:2100, windup:0.38, color:'#FFE15A', charge:3600 }
   },
   roly:{
