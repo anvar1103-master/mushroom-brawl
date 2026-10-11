@@ -16,6 +16,12 @@
 - Скриншоты и замеры: playwright в headless Chromium (`--use-gl=angle --use-angle=swiftshader`), поэтому первый кадр после смены карты рисуется ~20 с — это софтверный рендер, на настоящем железе не так.
 - Тестовые крючки в игре: `window.__bg` (`start({mode,hero,map,skipCount})`, `autopilot`, `sim(сек)`, `tick`, `cam([x,y,z,tx,ty,tz])`, `env(небо,сезон)`, `pause`, `bench`, `G`, `A`, `CAM`, `s`).
 
+## Помощники (.claude/agents)
+- `balance-tester` — тесты и бот-матчи для баланса (`tools/test.mjs`, `tools/balance.mjs`), короткий вердикт. Звать после изменений героев, оружия, ботов, режимов.
+- `phone-ui-checker` — экраны на трёх размерах телефона (`tools/ui-check.mjs`) + просмотр скриншотов. Звать после изменений меню, HUD, кнопок.
+- `asset-scout` — поиск и загрузка CC0-ассетов (Kenney, Quaternius, OpenGameArt) с лицензиями.
+Их длинный вывод остаётся у них, в основную сессию приходит итог — так дешевле.
+
 ## Устройство (src/js)
 - `main.js` — запуск, меню, настройки, поток матча, события→HUD, главный цикл, `__bg`. `state.js` — общий `G`, `emit/on`.
 - `engine.js` — рендерер, уровни графики (`LEVEL` low/medium/high, `stdMat`), запечённое небо, `setSky`, адаптация `perfWatch`. `env.js` — время суток и сезоны, снег/листья/светлячки.
