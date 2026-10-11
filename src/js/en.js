@@ -35,6 +35,8 @@ export const EN = {
   'Мяч у тебя':'You have the ball', 'Атака — удар или пас, супер — пушечный удар':'Attack kicks or passes, the super is a cannon shot', 'Счёт':'Score', 'Лесное поле':'Forest Pitch',
   'E · Пробел':'E · Space', 'Прицел':'Scope', 'Заряжено!':'Charged!',
   'ПКМ — прицел: приближение, выстрел заряжается до +60% урона':'RMB — scope: zoom in, the shot charges up to +60% damage',
+  'Время суток':'Time of day', 'Сезон':'Season', 'Случайно':'Random', 'День':'Day', 'Закат':'Sunset', 'Ночь':'Night', 'Лето':'Summer', 'Осень':'Autumn', 'Зима':'Winter',
+  'лето':'summer', 'осень':'autumn', 'зима':'winter',
   // battle
   'Супер':'Super', 'ПКМ · E':'RMB · E', 'Возрождение через':'Respawn in', 'Щёлкни по полю, чтобы управлять мышью':'Click the field to aim with the mouse',
   'Собери 10 спор и удержи их 15 секунд':'Collect 10 spores and hold them for 15 seconds', 'Ты':'You',

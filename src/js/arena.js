@@ -8,7 +8,35 @@ import { rand, pick, seeded, clamp, TAU, TOUCH } from './util.js';
 import { Q } from './engine.js';
 
 export const A = { map:null, W:0, H:0, rows:null, group:null, hx:0, hz:0, spawns:{ 0:[], 1:[], ffa:[] }, mine:null, grassTiles:[], crates:[], shared:{} };
-export const U = { time:{ value:0 }, push:{ value:Array.from({ length:10 }, () => new THREE.Vector3(0, 0, 0)) }, me:{ value:new THREE.Vector3(0, 0, 0) } };
+export const U = { time:{ value:0 }, push:{ value:Array.from({ length:10 }, () => new THREE.Vector3(0, 0, 0)) }, me:{ value:new THREE.Vector3(0, 0, 0) },
+  season:{ value:new THREE.Vector3(0, 0, 0) } };   // x: snow (winter), y: autumn colours
+
+// ---------------- seasons: one shared uniform recolours the whole arena, so switching costs no shader compile ----------------
+// ground: autumn turns it straw-brown, winter covers it in snow; leaf: grass and bushes go orange or frosted;
+// hedge: autumn browns, winter puts snow on the tops; stone: a light frost in winter
+const SEASON_GLSL = {
+  ground:`{ vec3 c = diffuseColor.rgb; float l = dot(c, vec3(0.333));
+    c = mix(c, vec3(l * 1.25, l * 1.02, l * 0.55), uSeason.y * 0.6);
+    c = mix(c, vec3(0.9, 0.94, 1.0) * (0.78 + 0.3 * l), uSeason.x * 0.82); diffuseColor.rgb = c; }`,
+  leaf:`{ vec3 c = diffuseColor.rgb; float l = dot(c, vec3(0.333));
+    c = mix(c, vec3(l * 1.6, l * 0.9, l * 0.3), uSeason.y * 0.75);
+    c = mix(c, vec3(0.86, 0.92, 0.95) * (0.7 + 0.4 * l), uSeason.x * 0.55); diffuseColor.rgb = c; }`,
+  hedge:`{ vec3 c = diffuseColor.rgb; float l = dot(c, vec3(0.333));
+    c = mix(c, vec3(l * 1.7, l * 0.95, l * 0.3), uSeason.y * 0.8);
+    float top = smoothstep(0.45, 0.85, vWN.y);
+    c = mix(c, vec3(0.94, 0.97, 1.0), uSeason.x * (0.18 + top * 0.8)); diffuseColor.rgb = c; }`,
+  stone:`{ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.94, 1.0), uSeason.x * 0.35); }`
+};
+export function seasonize(mat, kind){
+  const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey && mat.customProgramCacheKey !== THREE.Material.prototype.customProgramCacheKey ? mat.customProgramCacheKey.bind(mat) : null;
+  mat.onBeforeCompile = (sh, r) => {
+    if(prev) prev.call(mat, sh, r);
+    sh.uniforms.uSeason = U.season;
+    sh.fragmentShader = 'uniform vec3 uSeason;\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + SEASON_GLSL[kind]);
+  };
+  mat.customProgramCacheKey = () => (prevKey ? prevKey() : '') + 'season-' + kind;
+  return mat;
+}
 
 // ---------------- tiles ----------------
 export const tileX = c => (c - (A.W - 1) / 2) * TILE;
@@ -267,7 +295,7 @@ function instanceModel(name, list, matFor, opt = {}){
 export function buildArena(id){
   if(A.group){ scene.remove(A.group); A.group.traverse(o => { if(o.geometry && !o.userData.shared) o.geometry.dispose(); }); }
   const map = MAPS[id];
-  Object.assign(A, { map, W:map.W, H:map.H, rows:map.rows.map(r => [...r]), hx:map.W * TILE / 2, hz:map.H * TILE / 2, spawns:{ 0:[], 1:[], ffa:[] }, grassTiles:[], crates:[], mine:null });
+  Object.assign(A, { map, W:map.W, H:map.H, rows:map.rows.map(r => [...r]), hx:map.W * TILE / 2, hz:map.H * TILE / 2, spawns:{ 0:[], 1:[], ffa:[] }, grassTiles:[], crates:[], mine:null, bands:[], waterMat:null, flowers:[] });
   A.group = new THREE.Group(); scene.add(A.group);
   fitShadow(A.hx + 2, A.hz + 2);
   for(let r = 0; r < A.H; r++) for(let c = 0; c < A.W; c++){
@@ -349,7 +377,7 @@ function buildGround(){
     p.setY(i, -d * 0.7);
   }
   geo.computeVertexNormals();
-  const floor = new THREE.Mesh(geo, stdMat({ map:tex, roughness:0.95 }));
+  const floor = new THREE.Mesh(geo, seasonize(stdMat({ map:tex, roughness:0.95 }), 'ground'));
   floor.receiveShadow = true; A.group.add(floor);
   // the ground outside the fence: a big tiling grass texture that fades into fog
   const outTex = canvasTex(256, 256, (g, w, h) => {
@@ -357,12 +385,12 @@ function buildGround(){
     for(let i = 0; i < 1400; i++){ const x = rand(0, w), y = rand(0, h); g.strokeStyle = pick(['rgba(40,100,30,.5)', 'rgba(120,190,70,.45)', 'rgba(70,130,40,.5)']); g.lineWidth = rand(1, 2); g.beginPath(); g.moveTo(x, y); g.lineTo(x + rand(-2, 2), y - rand(3, 8)); g.stroke(); }
   }, { repeat:true });
   outTex.repeat.set(40, 40);
-  const outer = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), stdMat({ map:outTex, roughness:1 }));
+  const outer = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), seasonize(stdMat({ map:outTex, roughness:1 }), 'ground'));
   outer.rotation.x = -Math.PI / 2; outer.position.y = -0.02; outer.receiveShadow = true; A.group.add(outer);
 }
 
 function hedgeMat(){
-  if(!A.shared.hedge){ A.shared.hedge = triplanar(stdMat({ map:leafTex(), vertexColors:true, roughness:0.85, color:'#E8FFD8' }), 0.55, true); }
+  if(!A.shared.hedge){ A.shared.hedge = seasonize(triplanar(stdMat({ map:leafTex(), vertexColors:true, roughness:0.85, color:'#E8FFD8' }), 0.55, true), 'hedge'); }
   return A.shared.hedge;
 }
 export const HEDGE_H = 2.6;
@@ -404,7 +432,7 @@ function leafMat(color){
   const key = 'leaf' + color;
   if(!A.shared[key]){
     const map = NATURE.Bush_Common.parts[0].map;
-    A.shared[key] = windify(stdMat({ map, color, alphaTest:0.45, side:THREE.DoubleSide, roughness:0.8 }), 1.6, 0.05, false);
+    A.shared[key] = seasonize(windify(stdMat({ map, color, alphaTest:0.45, side:THREE.DoubleSide, roughness:0.8 }), 1.6, 0.05, false), 'leaf');
   }
   return A.shared[key];
 }
@@ -467,7 +495,7 @@ function buildCover(){
     if(ch === 'R'){ const k = (r * 7 + c * 3) % 3; rocks[k].push({ x, z, y:-0.05, rot:rand(0, TAU), s:0.56 }); }
     if(ch === 'T') stumps.push({ x, z, rot:rand(0, TAU), s:rand(0.95, 1.05) });
   }
-  const rockMat = stdMat({ map:NATURE.Rock_Medium_1.parts[0].map, roughness:0.9, color:'#D8E0D0' });
+  const rockMat = seasonize(stdMat({ map:NATURE.Rock_Medium_1.parts[0].map, roughness:0.9, color:'#D8E0D0' }), 'stone');
   rocks.forEach((list, i) => instanceModel('Rock_Medium_' + (i + 1), list, () => rockMat, { cast:true }));
   // stumps: lathe with bark, rings on top
   const { side, top } = stumpGeo();
@@ -486,7 +514,7 @@ function buildCover(){
     stumps.forEach((t, i) => { tmpQ.setFromAxisAngle(UP, t.rot); tmpM.compose(tmpP.set(t.x, 0, t.z), tmpQ, tmpS.setScalar(t.s)); im.setMatrixAt(i, tmpM); });
     im.castShadow = im.receiveShadow = true; A.group.add(im);
   };
-  if(stumps.length){ mk(side, stdMat({ map:bark, roughness:0.9 })); mk(top, stdMat({ map:rings, roughness:0.8 })); }
+  if(stumps.length){ mk(side, seasonize(stdMat({ map:bark, roughness:0.9 }), 'stone')); mk(top, seasonize(stdMat({ map:rings, roughness:0.8 }), 'ground')); }
 }
 
 export let grassMeshes = [];
@@ -522,7 +550,7 @@ function grassPatchGeo(n){
 function buildGrass(){
   const n = HIGH ? 70 : LOW ? 40 : 56;
   const geos = [grassPatchGeo(n), grassPatchGeo(n), grassPatchGeo(n)];
-  const mat = windify(stdMat({ vertexColors:true, roughness:1, side:THREE.DoubleSide, envMapIntensity:0.5 }), 1.6, 0.12, true);
+  const mat = seasonize(windify(stdMat({ vertexColors:true, roughness:1, side:THREE.DoubleSide, envMapIntensity:0.5 }), 1.6, 0.12, true), 'leaf');
   grassMeshes = [];
   geos.forEach((geo, k) => {
     const tiles = A.grassTiles.filter((t, i) => i % 3 === k);
@@ -538,7 +566,7 @@ function buildWater(){
   for(let r = 0; r < A.H; r++) for(let c = 0; c < A.W; c++) if(A.rows[r][c] === '~') list.push([c, r]);
   if(!list.length) return;
   const geos = list.map(([c, r]) => { const g = new THREE.PlaneGeometry(TILE + 0.5, TILE + 0.5); g.rotateX(-Math.PI / 2); g.translate(tileX(c), -0.16, tileZ(r)); return g; });
-  const mat = stdMat({ color:'#4FB5C8', roughness:0.12, metalness:0.1, transparent:true, opacity:0.82 });
+  const mat = A.waterMat = stdMat({ color:'#4FB5C8', roughness:0.12, metalness:0.1, transparent:true, opacity:0.82 });
   mat.onBeforeCompile = sh => {
     sh.uniforms.uTime = U.time;
     sh.vertexShader = 'varying vec3 vWP2;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n vWP2 = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -561,17 +589,17 @@ function buildDecor(){
     if(ch === '.' && rand() < 0.06) pebbles.push({ x:x + rand(-0.6, 0.6), z:z + rand(-0.6, 0.6), rot:rand(0, TAU), s:rand(0.4, 0.7) });
     if(ch === '.' && rand() < 0.05) clover.push({ x:x + rand(-0.6, 0.6), z:z + rand(-0.6, 0.6), rot:rand(0, TAU), s:rand(0.35, 0.5) });
   }
-  const gm = windify(stdMat({ map:NATURE.Grass_Common_Short.parts[0].map, roughness:0.9, side:THREE.DoubleSide, color:'#A8E07A' }), 1.3, 0.06, true);
+  const gm = seasonize(windify(stdMat({ map:NATURE.Grass_Common_Short.parts[0].map, roughness:0.9, side:THREE.DoubleSide, color:'#A8E07A' }), 1.3, 0.06, true), 'leaf');
   instanceModel('Grass_Common_Short', shortGrass, () => gm);
-  instanceModel('Flower_3_Group', flowers, p => p.matName === 'Flowers' ? flowerMat() : leafMat2('#5DB043'));
-  const pm = stdMat({ map:NATURE.Pebble_Round_1.parts[0].map, roughness:0.9 });
+  A.flowers = instanceModel('Flower_3_Group', flowers, p => p.matName === 'Flowers' ? flowerMat() : leafMat2('#5DB043'));
+  const pm = seasonize(stdMat({ map:NATURE.Pebble_Round_1.parts[0].map, roughness:0.9 }), 'stone');
   instanceModel('Pebble_Round_1', pebbles, () => pm);
   instanceModel('Clover_1', clover, () => leafMat2('#5AAE42'));
 }
 function flowerMat(){ return A.shared.fl || (A.shared.fl = windify(stdMat({ map:NATURE.Flower_3_Group.parts.find(p => p.matName === 'Flowers').map, alphaTest:0.4, side:THREE.DoubleSide, roughness:0.7 }), 2, 0.05, true)); }
 function leafMat2(color){
   const key = 'leaves' + color;
-  if(!A.shared[key]){ const part = NATURE.Fern_1.parts[0]; A.shared[key] = windify(stdMat({ map:part.map, color, alphaTest:0.4, side:THREE.DoubleSide, roughness:0.8 }), 2, 0.05, true); }
+  if(!A.shared[key]){ const part = NATURE.Fern_1.parts[0]; A.shared[key] = seasonize(windify(stdMat({ map:part.map, color, alphaTest:0.4, side:THREE.DoubleSide, roughness:0.8 }), 2, 0.05, true), 'leaf'); }
   return A.shared[key];
 }
 
@@ -607,7 +635,8 @@ function buildOutside(){
   for(const [r, h, seed, dark, light, tint] of [[R + 18, 15, 11, '#2C4A22', '#3E6230', '#FFFFFF'], [R + 34, 22, 23, '#3A4E38', '#4E6448', '#E8E0E0']]){
     const tex = treeBand(seed, dark, light); tex.repeat.set(4, 1);
     const g = new THREE.CylinderGeometry(r, r, h, 48, 1, true); g.translate(0, h / 2 - 0.5, 0);
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map:tex, alphaTest:0.5, side:THREE.BackSide, color:tint }));
+    const m = new THREE.Mesh(g, seasonize(new THREE.MeshBasicMaterial({ map:tex, alphaTest:0.5, side:THREE.BackSide, color:tint }), 'leaf'));
+    m.userData.tint = new THREE.Color(tint); A.bands.push(m);
     A.group.add(m);
   }
 }
