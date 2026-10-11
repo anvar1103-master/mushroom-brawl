@@ -29,7 +29,7 @@ export const HEROES = {
   roly:{
     name:'Катыш', species:'мокрица', role:'Рикошет', color:'#6E7FA3', hp:3300, speed:5.0, rad:0.42, height:1.3,
     desc:'Рогатка стреляет скачущими катышами: они отлетают от кустов и достают врага за углом.',
-    attack:{ kind:'bounce', name:'Скачущий катыш', range:12, speed:23, dmg:540, bounces:2, reload:1.35, cd:0.38, size:0.19, color:'#7FE7FF' },
+    attack:{ kind:'bounce', name:'Скачущий катыш', range:12, speed:24, dmg:760, bounces:2, reload:1.2, cd:0.38, size:0.19, color:'#7FE7FF' },
     super:{ kind:'bounce', name:'Большой катыш', desc:'огромный шар долго скачет по коридорам и бьёт всех на пути', range:30, speed:13, dmg:1150, bounces:7, pierce:true, knock:2.4, size:0.5, color:'#B8F4FF', charge:3800 }
   }
 };
