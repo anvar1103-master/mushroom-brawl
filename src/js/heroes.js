@@ -13,7 +13,7 @@ export const HEROES = {
   shroom:{
     name:'Шляпник', species:'мухомор', role:'Дробовик', color:'#E23A2E', hp:3900, speed:5.0, rad:0.42, height:1.35,
     desc:'Споровый дробовик бьёт веером: вблизи разносит любого.',
-    attack:{ kind:'fan', name:'Споровый веер', count:5, spread:0.5, range:7.2, speed:24, dmg:310, reload:1.5, cd:0.42, size:0.2, color:'#FF6B4A' },
+    attack:{ kind:'fan', name:'Споровый веер', count:5, spread:0.5, range:7.2, speed:24, dmg:290, reload:1.5, cd:0.42, size:0.2, color:'#FF6B4A' },
     super:{ kind:'fan', name:'Грибной залп', desc:'широкий залп отбрасывает врагов', count:11, spread:0.85, range:8.6, speed:27, dmg:330, knock:3.4, size:0.28, color:'#FFD24A', charge:4600 }
   },
   beetle:{
@@ -23,10 +23,10 @@ export const HEROES = {
     super:{ kind:'barrage', name:'Ковровая бомбёжка', desc:'пять бомб ложатся дорожкой', count:5, range:12, flight:0.95, radius:1.9, dmg:1050, knock:2.2, step:1.9, color:'#FF5A2E', charge:3900 }
   },
   wasp:{
-    name:'Жалка', species:'оса', role:'Снайпер', color:'#F5C21B', hp:2500, speed:5.2, rad:0.4, height:1.45, hover:0.22,
+    name:'Жалка', species:'оса', role:'Снайпер', color:'#F5C21B', hp:2900, speed:5.2, rad:0.4, height:1.45, hover:0.22,
     desc:'Дальнобойное жало: чем дальше цель, тем больнее. Прицел приближает, а выстрел из прицела заряжается до +60% урона.',
     // scope: hold to aim down the sight (zoom, slower steps); the shot charges up to +60% damage, flies further and faster
-    attack:{ kind:'needle', name:'Жало', range:15, speed:40, dmg:900, dmgFar:1650, reload:1.9, cd:0.5, size:0.16, color:'#FFB21E', scope:{ time:1.1, dmg:0.6, range:1.35, speed:1.3, slow:0.5 } },
+    attack:{ kind:'needle', name:'Жало', range:15, speed:40, dmg:900, dmgFar:1650, reload:1.9, cd:0.5, size:0.16, color:'#FFB21E', scope:{ time:0.9, dmg:0.6, range:1.35, speed:1.3, slow:0.5 } },
     super:{ kind:'beam', name:'Пронзающий луч', desc:'луч прошивает стены и всех на пути', range:21, width:0.75, dmg:2100, windup:0.38, color:'#FFE15A', charge:3600 }
   },
   roly:{
