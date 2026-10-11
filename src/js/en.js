@@ -34,6 +34,8 @@ export const EN = {
   'Останься последним! Ломай ящики — в них сила':'Be the last one standing! Break crates to power up', 'Туман':'Fog', 'Туман идёт':'Fog moving', 'Финал':'Final',
   'Туман сгущается!':'The fog is closing in!', 'Держись ближе к центру':'Stay close to the middle', 'Ты — последний гриб!':'You are the last shroom standing!',
   'Тебя срезал: ':'Knocked out by ', 'Тебя накрыл ядовитый туман.':'The poison fog got you.', 'Лесной лабиринт':'Forest Maze',
+  'Займи укрытие':'Find some cover', 'Ты в топ-3!':'You are in the top 3!', 'Пусть другие дерутся первыми':'Let the others fight first', 'Финал!':'Final!', 'Один на один':'One on one',
+  'Очки':'Points', 'всего':'total',
   // bot names
   'Груздь':'Milkcap', 'Опёнок':'Honeycap', 'Сморчок':'Morel', 'Рыжик':'Saffron', 'Маслёнок':'Butterball', 'Волнушка':'Woolly', 'Строчок':'Brainy', 'Белянка':'Whitey',
   'Ежовик':'Hedgehog', 'Дубовик':'Oakcap', 'Вешенка':'Oyster', 'Короед':'Bark Beetle', 'Шершень':'Hornet', 'Жужелица':'Ground Beetle', 'Щелкун':'Clicker',

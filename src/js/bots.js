@@ -9,7 +9,7 @@ export const SKILL = { easy:{ err:0.22, react:0.6, lead:0.4, dodge:0.2 }, normal
 const PREF = { shroom:0.5, beetle:0.72, wasp:0.82 };
 
 export function newBot(skill = 'normal'){
-  return { S:SKILL[skill], path:null, pathT:0, gx:null, gz:null, mode:'idle', target:null, seenT:0, mem:new Map(), strafe:rand() < 0.5 ? -1 : 1, strafeT:rand(0.6, 1.6), thinkT:0, holdX:0, holdZ:0, stuck:0, lx:0, lz:0 };
+  return { S:SKILL[skill], temper:rand() < 0.55 ? 'careful' : 'bold', path:null, pathT:0, gx:null, gz:null, mode:'idle', target:null, seenT:0, mem:new Map(), strafe:rand() < 0.5 ? -1 : 1, strafeT:rand(0.6, 1.6), thinkT:0, holdX:0, holdZ:0, stuck:0, lx:0, lz:0 };
 }
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -97,46 +97,100 @@ function sporesGoal(f, B, T, dt){
   return [mx, mz];
 }
 
-// «Последний гриб»: stay ahead of the fog, break crates and grab power, pick fights you can win
+// «Последний гриб»: play for the place, not for knockouts.
+//   - loot first (crates, power), fight only up close or when shot at
+//   - weigh a fight before taking it: health × power against the enemy's; walk away from fights we'd lose
+//   - don't run into someone else's fight: wait at the edge and finish the winner
+//   - break off, hide (tall grass if there is some) and heal when hurt
+//   - move to the next safe circle early and sit in cover there; ambush from grass; never chase into the fog
+// Each bot has a temper: careful ones hide and wait, bold ones hunt once they have some power.
+const strength = o => o.hp * (1 + 0.15 * (o.power || 0));
+const inZone = (x, z, r) => Math.hypot(x, z) < r;
+// a cover spot near (x, z) inside radius lim: tall grass if any, otherwise any open tile next to a hedge
+function coverNear(x, z, lim, rad = 7){
+  let best = null, bs = 1e9;
+  for(let i = 0; i < 22; i++){
+    const a = rand(0, TAU), d = rand(0, rad), px = x + Math.sin(a) * d, pz = z + Math.cos(a) * d;
+    if(!inZone(px, pz, lim)) continue;
+    const ch = tileAtXZ(px, pz); if(ch !== '.' && ch !== '"') continue;
+    let sc = d + (ch === '"' ? -6 : 0);
+    if(ch === '.'){ let walls = 0; for(const [dx, dz] of [[1.6, 0], [-1.6, 0], [0, 1.6], [0, -1.6]]) if(tileAtXZ(px + dx, pz + dz) === '#') walls++; sc -= walls * 1.5; }
+    if(sc < bs){ bs = sc; best = { x:px, z:pz }; }
+  }
+  return best;
+}
 function royaleGoal(f, B, T, dt){
-  const H = f.H, now = G.time, R = fogR(), soon = fogAhead(6);
-  const rc = Math.hypot(f.x, f.z);
+  const H = f.H, M = G.match, now = G.time, R = fogR(), soon = Math.min(R, fogAhead(8));
+  const rc = Math.hypot(f.x, f.z), bold = B.temper === 'bold';
+  B.holdFire = false;
   B.thinkT -= dt;
   if(B.thinkT <= 0){
     B.thinkT = rand(0.25, 0.4);
-    const hurt = f.hp < f.max * 0.38, calm = G.match.t < ROYALE.wait && f.regenT > 1.5;
     B.crate = null; B.pk = null;
-    if(rc > Math.min(R, soon) - 2.5) B.mode = 'zone';
-    else if(hurt && T && dist(f, T) < 7 && f.hp < T.hp) B.mode = 'retreat';
-    // the first seconds are for looting, as long as nobody is right in our face or shooting at us
-    else if(T && dist(f, T) < H.attack.range * (calm ? 0.7 : 1.35)) B.mode = 'fight';
+    const d = T ? dist(f, T) : 1e9, range = H.attack.range;
+    const hitMe = now - (f.hurtAt || -9) < 1.5 && f.lastHitBy && f.lastHitBy.alive;   // someone is shooting at us right now
+    const calm = M.t < ROYALE.calm * (bold ? 0.75 : 1.1) && !hitMe;
+    const late = M.alive <= 4;
+    // our odds against the target: health and power on both sides
+    const odds = T ? strength(f) / Math.max(1, strength(T)) : 9;
+    // is the target busy fighting somebody else?
+    // a target running away isn't worth a chase across the maze
+    const fleeing = T && (T.x - f.x) * T.vx + (T.z - f.z) * T.vz > 0 && Math.hypot(T.vx, T.vz) > 2;
+    const busy = T && now - (T.hurtAt || -9) < 1.5 && T.lastHitBy && T.lastHitBy !== f && T.lastHitBy.alive && dist(T, T.lastHitBy) < 12;
+    // the loot phase: nobody starts a fight, only answers one (or someone walks right into us)
+    const quiet = calm && T && !hitMe;
+    B.quiet = quiet;
+    if(rc > soon - 2.5) B.mode = 'zone';
+    else if(f.hp < f.max * 0.4 && (!T || d > range * 0.6)) B.mode = 'heal';
+    else if(T && hitMe && f.lastHitBy === T && odds < (calm ? 1.3 : 0.7) && d > 3) B.mode = 'retreat';
+    else if(quiet){ const loot = lootNear(f, soon); B.mode = loot ? (loot.pk ? 'collect' : 'crate') : 'hold'; if(loot){ B.pk = loot.pk; B.crate = loot.crate; } }
+    else if(T && busy && odds < 2.5 && T.hp > T.max * 0.35) B.mode = 'wait';            // let them wear each other down
+    else if(T && d < range * (calm ? 0.6 : 1.3) && !(fleeing && d > range * 0.9) && (odds > (M.alive <= 2 ? 0.8 : late ? 1.15 : bold ? 1.0 : 1.35) || hitMe || d < range * 0.45)) B.mode = 'fight';
+    else if(T && d < range * 1.3) B.mode = 'avoid';                                     // a fight we'd lose: slip away
     else {
-      // the nearest power spore or crate that lies inside the safe area
-      let pk = null, pd = 13;
-      for(const p of G.pickups){ const d = Math.hypot(p.x - f.x, p.z - f.z); if(d < pd && Math.hypot(p.x, p.z) < soon - 1.5){ pd = d; pk = p; } }
-      if(pk){ B.mode = 'collect'; B.pk = pk; }
+      const loot = lootNear(f, soon);
+      if(loot && (loot.pk || !late)){ B.mode = loot.pk ? 'collect' : 'crate'; B.pk = loot.pk; B.crate = loot.crate; }
       else {
-        let kc = null, kd = 15;
-        for(const k of A.crates){ if(!k.alive) continue; const d = Math.hypot(k.x - f.x, k.z - f.z); if(d < kd && Math.hypot(k.x, k.z) < soon - 1.5){ kd = d; kc = k; } }
-        let seen = null; for(const m of B.mem.values()) if(m.o.alive && now - m.t < 5 && (!seen || m.t > seen.t)) seen = m;
-        if(kc && !(seen && f.hp > f.max * 0.7 && rand() < 0.3)){ B.mode = 'crate'; B.crate = kc; }
-        else if(seen && f.hp > f.max * 0.6 && !calm){ B.mode = 'hunt'; B.huntX = seen.x; B.huntZ = seen.z; }
-        else B.mode = 'roam';
+        let seen = null; for(const m of B.mem.values()) if(m.o.alive && now - m.t < 5 && inZone(m.x, m.z, soon) && (!seen || m.t > seen.t)) seen = m;
+        // only the bold hunt, and only with health and a little power; in the final everyone closes in
+        if(seen && !calm && f.hp > f.max * 0.8 && (M.alive <= 2 || (bold && (f.power || 0) >= 4 && M.alive <= 6 && !late))){ B.mode = 'hunt'; B.huntX = seen.x; B.huntZ = seen.z; }
+        else B.mode = 'hold';
       }
     }
+    if(B.mode !== B.lastMode){ B.spot = null; B.lastMode = B.mode; }
   }
+  const lim = Math.max(2, soon - 2.5);
+  B.noChase = !!T && !inZone(T.x, T.z, soon - 1);   // never follow anyone out into the fog
+  // a bot in hiding doesn't give itself away: it shoots only at close range or when shot at
+  if(B.mode === 'heal' || B.mode === 'hold' || B.mode === 'wait' || B.mode === 'avoid' || B.quiet) B.holdFire = true;
   if(B.mode === 'zone'){
-    // head for a spot well inside the circle, on our side of the middle
-    const k = Math.max(0, Math.min(R, soon) * 0.45) / (rc || 1);
-    return goTo(f, f.x * k, f.z * k, dt);
+    // into the circle early, toward cover on our side of the middle
+    if(!B.spot || !inZone(B.spot.x, B.spot.z, lim)){ const k = Math.min(soon * 0.55, rc) / (rc || 1); B.spot = coverNear(f.x * k, f.z * k, lim, 5) || { x:f.x * k, z:f.z * k }; }
+    return goTo(f, B.spot.x, B.spot.z, dt);
   }
-  if(B.mode === 'retreat' && T){
-    // run away from the threat, but never out into the fog
+  if((B.mode === 'retreat' || B.mode === 'avoid') && T){
+    // away from the threat, never out into the fog, preferably into cover
     const d = dist(f, T) || 1;
-    let ax = f.x + (f.x - T.x) / d * 5, az = f.z + (f.z - T.z) / d * 5;
-    const ra = Math.hypot(ax, az), lim = Math.max(2, Math.min(R, soon) - 3);
-    if(ra > lim){ ax *= lim / ra; az *= lim / ra; }
-    return goTo(f, ax, az, dt);
+    if(!B.spot || now > (B.spotT || 0)){
+      let ax = f.x + (f.x - T.x) / d * 7, az = f.z + (f.z - T.z) / d * 7;
+      const ra = Math.hypot(ax, az); if(ra > lim){ ax *= lim / ra; az *= lim / ra; }
+      B.spot = coverNear(ax, az, lim, 4) || { x:ax, z:az }; B.spotT = now + 1.5;
+    }
+    return goTo(f, B.spot.x, B.spot.z, dt);
+  }
+  if(B.mode === 'heal' || B.mode === 'hold' || B.mode === 'wait'){
+    // sit still in cover; 'wait' keeps a distance from the fight it is watching
+    if(!B.spot || !inZone(B.spot.x, B.spot.z, lim)){
+      let cx = f.x, cz = f.z;
+      if(B.mode === 'wait' && T){ const d = dist(f, T) || 1, keep = f.H.attack.range + 2; cx = T.x + (f.x - T.x) / d * keep; cz = T.z + (f.z - T.z) / d * keep; }
+      // late in the match, hold somewhere that stays safe for a while
+      if(B.mode === 'hold' && rc > soon * 0.7){ const k = soon * 0.5 / (rc || 1); cx = f.x * k; cz = f.z * k; }
+      B.spot = coverNear(cx, cz, lim) || { x:cx, z:cz };
+    }
+    if(Math.hypot(B.spot.x - f.x, B.spot.z - f.z) > 0.8) return goTo(f, B.spot.x, B.spot.z, dt);
+    // a slow look around while waiting so the body isn't frozen solid
+    if(!T) f.inp.aim += dt * 0.4;
+    return [0, 0];
   }
   if(B.mode === 'collect' && B.pk && G.pickups.includes(B.pk)) return goTo(f, B.pk.x, B.pk.z, dt);
   if(B.mode === 'crate' && B.crate && B.crate.alive){
@@ -151,19 +205,19 @@ function royaleGoal(f, B, T, dt){
     if(Math.hypot(B.huntX - f.x, B.huntZ - f.z) > 1.2) return goTo(f, B.huntX, B.huntZ, dt);
     B.thinkT = 0;
   }
-  if(B.mode === 'roam' || B.mode === 'hunt'){
-    // wander between random open spots inside the safe area
-    if(!B.wp || now > B.wpT || Math.hypot(B.wp.x - f.x, B.wp.z - f.z) < 1.2 || Math.hypot(B.wp.x, B.wp.z) > soon - 2){
-      const lim = Math.max(2, soon - 3);
-      for(let i = 0; i < 12; i++){
-        const a = rand(0, TAU), r = Math.sqrt(rand()) * lim, x = Math.sin(a) * r, z = Math.cos(a) * r;
-        if(tileAtXZ(x, z) === '.' || tileAtXZ(x, z) === '"'){ B.wp = { x, z }; break; }
-      }
-      B.wpT = now + rand(5, 8);
-    }
-    if(B.wp) return goTo(f, B.wp.x, B.wp.z, dt);
-  }
   return [0, 0];
+}
+// the nearest power spore, or crate, lying inside the safe area
+// (loot a rival we can see is closer to is theirs: going for it only starts a fight)
+function lootNear(f, soon){
+  const rivals = G.fighters.filter(o => o.alive && o !== f && f.bot.mem.has(o.id) && G.time - f.bot.mem.get(o.id).t < 3);
+  const mine = (x, z, d) => !rivals.some(o => Math.hypot(o.x - x, o.z - z) < d - 0.5);
+  let pk = null, pd = 14;
+  for(const p of G.pickups){ const d = Math.hypot(p.x - f.x, p.z - f.z); if(d < pd && inZone(p.x, p.z, soon - 1.5) && mine(p.x, p.z, d)){ pd = d; pk = p; } }
+  if(pk) return { pk };
+  let kc = null, kd = 18;
+  for(const k of A.crates){ if(!k.alive) continue; const d = Math.hypot(k.x - f.x, k.z - f.z); if(d < kd && inZone(k.x, k.z, soon - 1.5) && mine(k.x, k.z, d)){ kd = d; kc = k; } }
+  return kc ? { crate:kc } : null;
 }
 
 function fightMoveAndShoot(f, B, T, mx, mz, dt){
@@ -175,7 +229,8 @@ function fightMoveAndShoot(f, B, T, mx, mz, dt){
     B.strafeT -= dt; if(B.strafeT <= 0){ B.strafeT = rand(0.5, 1.4); B.strafe = -B.strafe; }
     if(B.mode === 'fight'){
       let ax = 0, az = 0;
-      if(d > want + 1 || !losClear(f.x, f.z, T.x, T.z) && f.hero !== 'beetle') [ax, az] = goTo(f, T.x, T.z, dt);
+      if(B.noChase){}
+      else if(d > want + 1 || !losClear(f.x, f.z, T.x, T.z) && f.hero !== 'beetle') [ax, az] = goTo(f, T.x, T.z, dt);
       else if(d < want - 1.5){ ax = -dx; az = -dz; }
       mx = ax * 0.9 + -dz * B.strafe * 0.7; mz = az * 0.9 + dx * B.strafe * 0.7;
     }
@@ -211,7 +266,9 @@ function fightMoveAndShoot(f, B, T, mx, mz, dt){
     tx = f.x + Math.sin(a) * d; tz = f.z + Math.cos(a) * d;
     inp.aim = a; inp.tx = tx; inp.tz = tz;
     const los = losClear(f.x, f.z, T.x, T.z);
-    const ready = B.seenT > B.S.react;
+    // hiding bots keep quiet until the enemy is close or they are found
+    const hurt = G.time - (f.hurtAt || -9) < 1.5;
+    const ready = B.seenT > B.S.react && (!B.holdFire || hurt || (!B.quiet && d < W.range * 0.55));
     // supers: shotgun up close, bombs on anyone in reach, beam lined up from far
     if(ready && f.charge >= 1){
       if((Sp.kind === 'fan' && d < Sp.range * 0.75 && los) || (Sp.kind === 'barrage' && d < Sp.range) || (Sp.kind === 'beam' && d < Sp.range * 0.9)) inp.sup = true;
@@ -227,7 +284,7 @@ function fightMoveAndShoot(f, B, T, mx, mz, dt){
     const k = B.shootAt;
     inp.aim = Math.atan2(k.x - f.x, k.z - f.z); inp.tx = k.x; inp.tz = k.z;
     if(canAttack(f) && f.ammo >= 1) inp.fire = true;
-  } else if(f.hero === 'beetle' && canAttack(f) && f.ammo >= 2.5){
+  } else if(f.hero === 'beetle' && !B.holdFire && canAttack(f) && f.ammo >= 2.5){
     // bomb the bush where an enemy was last seen
     for(const m of B.mem.values()){
       if(!m.o.alive || now - m.t > 2.5 || now - m.t < 0.4) continue;
