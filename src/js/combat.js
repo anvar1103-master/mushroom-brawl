@@ -9,6 +9,7 @@ import { glow, smoke, puff, explosion, hitSpark, sporeBurst, dmgNumber, dust, ri
 import { clamp, rand, TAU, lerp } from './util.js';
 import { sfx } from './audio.js';
 import { damageCrateAt, damageCratesIn, damageCrate, ROYALE } from './royale.js';
+import { makeBolt, moveBolt, freeBolt, flashAt, scorchAt } from './shotfx.js';
 
 export const SHOT_Y = 0.75;
 export const REGEN_DELAY = 3, REGEN_RATE = 0.13;
@@ -175,12 +176,14 @@ function fireWeapon(f, W, aim, tx, tz, isSuper){
       const a = aim + (W.count > 1 ? (i / (W.count - 1) - 0.5) * W.spread : 0) + rand(-0.015, 0.015);
       addShot(f, MZ.x, MZ.z, a, W, W.dmg * pow, isSuper);
     }
+    flashAt(MZ.x, MZ.y, MZ.z, W.color, isSuper ? 1.3 : 0.85, 0.08);
     puff(glow, MZ.x, MZ.y, MZ.z, { n:isSuper ? 16 : 8, color:W.color, sp:isSuper ? 7 : 4, vx:Math.sin(aim) * 4, vz:Math.cos(aim) * 4, life:0.22, s0:0.35, s1:0.05, drag:6 });
     puff(smoke, MZ.x, MZ.y, MZ.z, { n:isSuper ? 10 : 5, color:'#F2E8D0', sp:1.5, vx:Math.sin(aim) * 3, vz:Math.cos(aim) * 3, life:0.5, s0:0.18, s1:0.5, drag:4, soft:true, a:0.6 });
     if(isSuper){ f.kx -= Math.sin(aim) * 7; f.kz -= Math.cos(aim) * 7; G.shake = Math.max(G.shake, f.isMe ? 0.5 : 0); }
     sfx(isSuper ? 'boom' : 'shot_shotgun', f);
   } else if(W.kind === 'needle'){
     addShot(f, MZ.x, MZ.z, aim, W, W.dmg * pow, isSuper);
+    flashAt(MZ.x, MZ.y, MZ.z, W.color, 0.7, 0.07);
     puff(glow, MZ.x, MZ.y, MZ.z, { n:6, color:W.color, sp:3, life:0.18, s0:0.3, s1:0.05, drag:6 });
     sfx('shot_beam', f, 0.6);
   } else if(W.kind === 'lob'){
@@ -203,9 +206,10 @@ needleGeo.rotateX(Math.PI / 2);
 const matCache = {};
 const glowMat = (c, k = 2.4) => matCache[c + k] || (matCache[c + k] = new THREE.MeshBasicMaterial({ color:new THREE.Color(c).multiplyScalar(k), toneMapped:false }));
 function addShot(f, x, z, a, W, dmg, isSuper){
-  const m = new THREE.Mesh(W.kind === 'needle' ? needleGeo : shotGeo, glowMat(W.color, isSuper ? 3 : 2.2));
-  m.scale.setScalar(W.size || 0.2); m.position.set(x, SHOT_Y, z); m.rotation.y = a;
-  scene.add(m);
+  // a glowing bolt with a trail; the stinger's is long and thin, pellets are short (and trail-less on phones)
+  const needle = W.kind === 'needle', sz = W.size || 0.2;
+  const m = makeBolt(W.color, needle ? sz * 2.6 : sz * 2.2, needle ? 3.2 : isSuper ? 1.4 : 1.0, needle || !LOW);
+  moveBolt(m, x, SHOT_Y, z, Math.sin(a), Math.cos(a), 0);
   G.shots.push({ owner:f, team:f.team, x, z, x0:f.x, z0:f.z, vx:Math.sin(a) * W.speed, vz:Math.cos(a) * W.speed, range:W.range, dist:0, dmg, W, isSuper, m, knock:W.knock || 0 });
 }
 function segPointDist2(ax, az, bx, bz, px, pz){
@@ -224,6 +228,10 @@ export function updateShots(dt){
       nx = s.x + (nx - s.x) * wall; nz = s.z + (nz - s.z) * wall; end = true; hitSpark(nx, SHOT_Y, nz, s.W.color); sfx('hit_wall', { x:nx, z:nz }, 0.35);
       // a crate takes the hit (look a hair past the point where the shot stopped)
       const l = Math.hypot(s.vx, s.vz) || 1;
+      // a flash and a burn mark on the face that was hit (the side facing the shooter)
+      flashAt(nx, SHOT_Y, nz, s.W.color, (s.W.size || 0.2) * 4, 0.09);
+      const ax = Math.abs(s.vx) > Math.abs(s.vz);
+      scorchAt(nx, SHOT_Y, nz, ax ? -Math.sign(s.vx) : 0, 0, ax ? 0 : -Math.sign(s.vz), s.W.kind === 'needle' ? 0.55 : 0.32);
       damageCrateAt(nx + s.vx / l * 0.08, nz + s.vz / l * 0.08, s.W.dmgFar ? lerp(s.dmg, s.W.dmgFar * s.owner.pow, clamp(s.dist / s.range, 0, 1)) : s.dmg);
     }
     // fighters along the path
@@ -235,16 +243,16 @@ export function updateShots(dt){
         if(s.W.dmgFar) dmg = lerp(s.dmg, s.W.dmgFar * s.owner.pow, clamp((s.dist + step) / s.range, 0, 1));
         damage(o, dmg, s.owner, s.isSuper);
         if(s.knock){ const l = Math.hypot(s.vx, s.vz); o.kx += s.vx / l * s.knock * 2.2; o.kz += s.vz / l * s.knock * 2.2; o.stunT = Math.max(o.stunT, 0.25); }
-        hitSpark(o.x, SHOT_Y + 0.1, o.z, s.W.color);
+        hitSpark(o.x, SHOT_Y + 0.1, o.z, s.W.color); flashAt(o.x, SHOT_Y + 0.1, o.z, s.W.color, 0.7, 0.08);
         end = true; nx = o.x; nz = o.z; break;
       }
     }
     s.dist += Math.hypot(nx - s.x, nz - s.z);
     s.x = nx; s.z = nz;
-    s.m.position.set(nx, SHOT_Y, nz);
+    moveBolt(s.m, nx, SHOT_Y, nz, s.vx, s.vz, s.dist);
     // trail
-    if(Math.random() < 0.7) glow.emit({ x:nx, y:SHOT_Y, z:nz, vx:0, vy:0, vz:0, life:s.W.kind === 'needle' ? 0.3 : 0.16, t:0, s0:(s.W.size || 0.2) * (s.W.kind === 'needle' ? 1.6 : 1.4), s1:0.02, r:1, g:0.8, b:0.4, a:0.7, grav:0, drag:0, soft:1 });
-    if(end){ scene.remove(s.m); G.shots.splice(i, 1); }
+    if(Math.random() < 0.25) glow.emit({ x:nx, y:SHOT_Y, z:nz, vx:0, vy:0, vz:0, life:s.W.kind === 'needle' ? 0.3 : 0.16, t:0, s0:(s.W.size || 0.2) * (s.W.kind === 'needle' ? 1.6 : 1.4), s1:0.02, r:1, g:0.8, b:0.4, a:0.7, grav:0, drag:0, soft:1 });
+    if(end){ freeBolt(s.m); G.shots.splice(i, 1); }
   }
 }
 
@@ -377,6 +385,7 @@ export function damage(o, amount, src, isSuper, quiet){
   const meTeam = G.me ? G.me.team : 0;
   if((G.me && canSee(G.me, o)) || o === G.me || src === G.me) dmgNumber(o.x, o.H.height + 0.25, o.z, amount, o === G.me ? 'me' : src === G.me ? 'mine' : '');
   emit('damage', o, amount, src);
+  if(src === G.me && o !== G.me) emit('hitMarker', o.hp <= 0);
   if(o.hp <= 0) kill(o, src);
   return amount;
 }
