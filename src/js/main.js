@@ -1,9 +1,9 @@
 // Boot, match flow and the main loop.
 import * as THREE from 'three';
-import { $, TOUCH, store, shuffle, esc } from './util.js';
+import { $, TOUCH, store, shuffle, esc, TAU } from './util.js';
 import { renderer, scene, camera, resize, applyQuality, setQuality, render, perfWatch, skyTick, buildEnv, bakeSky, sky, Q } from './engine.js';
 import { loadNature } from './assets.js';
-import { buildArena, U, A, segHit } from './arena.js';
+import { buildArena, resetCrates, U, A, segHit, blocksSight } from './arena.js';
 import { applyLang, tr, L } from './i18n.js';
 import { G, on } from './state.js';
 import { HEROES, HERO_IDS } from './heroes.js';
@@ -11,13 +11,15 @@ import { effectSamples, makeFighter, removeFighters, spawn, stepFighter, updateS
 import { makeVisual, animate, setTeamLook, kick } from './anim.js';
 import { newBot, botThink } from './bots.js';
 import { buildMine, startSpores, updateSpores, clearSpores } from './mode.js';
+import { ROYALE, startRoyale, updateRoyale, clearRoyale, royaleSamples } from './royale.js';
 import { playerInput, updateCamera, updateGuide, CAM, releaseLock, lockHint } from './player.js';
 import { makeTag, updateTags, updateHud, feed, announce, tickAnnounce, renderHeroes, showEnd } from './hud.js';
 import { updateFx, clearFx, explosion, hitSpark, sporeBurst } from './fx.js';
 import { preloadSfx, unlockAudio, sfx, AU, setSfx, setMusic } from './audio.js';
 import { yaInit, yaLoaded, yaTick, yaInterstitial, YA, onYandex } from './yandex.js';
 
-const MENU = { hero:HEROES[store.get('hero', 'shroom')] ? store.get('hero', 'shroom') : 'shroom', diff:store.get('diff', 'normal') };
+const MENU = { hero:HEROES[store.get('hero', 'shroom')] ? store.get('hero', 'shroom') : 'shroom', diff:store.get('diff', 'normal'), mode:store.get('mode', 'spores') === 'br' ? 'br' : 'spores' };
+const placeText = n => L.lang === 'en' ? `#${n} place` : `#${n} место`;
 const NAMES = ['Груздь', 'Опёнок', 'Сморчок', 'Рыжик', 'Маслёнок', 'Волнушка', 'Строчок', 'Белянка', 'Ежовик', 'Дубовик', 'Вешенка', 'Короед', 'Шершень', 'Жужелица', 'Щелкун', 'Светлячок', 'Медведка', 'Долгоносик'];
 
 // ---------------- boot ----------------
@@ -33,8 +35,8 @@ applyQuality();
 addEventListener('resize', resize);
 // warm up: put one of every effect in the scene and compile all shaders now, not during the first fight
 {
-  const samples = effectSamples(); samples.forEach(m => scene.add(m));
-  explosion(A.mine.x, A.mine.z, 1.7); hitSpark(0, 1, 0, '#fff'); sporeBurst(0, 1, 0, '#fff', 4);
+  const samples = effectSamples().concat(royaleSamples()); samples.forEach(m => scene.add(m));
+  explosion(0, 0, 1.7); hitSpark(0, 1, 0, '#fff'); sporeBurst(0, 1, 0, '#fff', 4);
   for(const H of HERO_IDS){ const V = makeVisual(H); scene.add(V.root); samples.push(V.root); }
   try{ renderer.compile(scene, camera); }catch(e){}
   samples.forEach(m => scene.remove(m)); clearFx(); G.shake = 0;
@@ -46,15 +48,17 @@ let preview = null;
 function setPreview(id){
   if(preview){ scene.remove(preview.V.root); preview.V.mesh.geometry.dispose(); }
   const V = makeVisual(id); setTeamLook(V, 'me'); scene.add(V.root);
-  const s = A.spawns[0][1];
+  const s = A.map.id === 'maze' ? { x:0, z:1.2 } : A.spawns[0][1];
   preview = { V, hop:1.2, f:{ id:99, x:s.x, z:s.z - 1.2, vx:0, vz:0, aim:Math.PI, alive:true, atkT:9, supT:0, flash:0, deadT:0, victory:false } };
   V.yaw = Math.PI; kick.spawn(V);
 }
 function renderMenu(){
   renderHeroes(MENU.hero, id => { MENU.hero = id; store.set('hero', id); sfx('select'); renderMenu(); setPreview(id); });
   for(const b of $('m-diff').querySelectorAll('button')) b.classList.toggle('sel', b.dataset.v === MENU.diff);
+  for(const b of $('m-mode').querySelectorAll('.mode-card')) b.classList.toggle('sel', b.dataset.v === MENU.mode);
   $('howto').textContent = tr(TOUCH ? 'Левый палец — бег, правый — поворот камеры. Кнопка атаки: короткое нажатие — автоприцел, с протяжкой — целишься сам. Звезда — супер.' : 'WASD — бег, мышь — камера и прицел, ЛКМ — атака, ПКМ или E — супер, Esc — пауза.');
 }
+$('m-mode').onclick = e => { const b = e.target.closest('.mode-card'); if(!b || b.dataset.v === MENU.mode) return; MENU.mode = b.dataset.v; store.set('mode', MENU.mode); sfx('select'); renderMenu(); };
 $('m-diff').onclick = e => { const v = e.target.dataset.v; if(!v) return; MENU.diff = v; store.set('diff', v); sfx('click'); renderMenu(); };
 // ---------------- settings ----------------
 const SET = { fps:store.get('fps', false) };
@@ -84,7 +88,7 @@ function showMenu(){
   renderMenu(); setPreview(MENU.hero);
 }
 function cleanup(){
-  removeFighters(); clearSpores(); clearFx();
+  removeFighters(); clearSpores(); clearRoyale(); clearFx();
   for(const s of G.shots) scene.remove(s.m); G.shots.length = 0;
   for(const l of G.lobs){ scene.remove(l.m); scene.remove(l.mark); } G.lobs.length = 0;
   for(const p of G.puddles) scene.remove(p.m); G.puddles.length = 0;
@@ -94,9 +98,18 @@ function cleanup(){
 
 // ---------------- match ----------------
 let countT = 0, endT = 0, lastCount = 0;
+// each mode has its own map; switching costs one rebuild, replaying the same mode only resets the crates
+function useArena(id){
+  if(A.map.id !== id){ buildArena(id); buildMine(); }
+  else resetCrates();
+}
 function startMatch(opts = {}){
   cleanup();
   if(preview){ scene.remove(preview.V.root); preview = null; }
+  const mode = G.mode = opts.mode || MENU.mode;
+  document.body.classList.toggle('br', mode === 'br');
+  if(mode === 'br') return startRoyaleMatch(opts);
+  useArena('glade');
   startSpores();
   const names = shuffle([...NAMES]);
   const myHero = opts.hero || MENU.hero;
@@ -112,12 +125,34 @@ function startMatch(opts = {}){
     if(isMe) G.me = f; else f.bot = newBot(opts.diff || MENU.diff);
   }
   for(const f of G.fighters){ makeTag(f); spawn(f); }
-  CAM.yaw = G.me.team === 0 ? Math.PI : 0; CAM.x = G.me.x; CAM.z = G.me.z; CAM.pitch = -0.08;
+  beginMatch('Споры', 'Собери 10 спор и удержи их 15 секунд');
+}
+// «Последний гриб»: ten fighters, each on their own team, spread over the corners of the maze
+function startRoyaleMatch(opts){
+  useArena('maze');
+  startRoyale(); leftShown = 0;
+  const names = shuffle([...NAMES]);
+  const myHero = opts.hero || MENU.hero;
+  const spots = shuffle(A.spawns.ffa.map((s, i) => i));
+  for(let i = 0; i < ROYALE.fighters; i++){
+    const isMe = i === 0;
+    const f = makeFighter({ name:isMe ? tr('Ты') : tr(names.pop()), team:i, hero:isMe ? myHero : HERO_IDS[Math.floor(Math.random() * HERO_IDS.length)], isMe });
+    f.slot = spots[i % spots.length]; f.gemsPicked = 0;
+    if(isMe) G.me = f; else f.bot = newBot(opts.diff || MENU.diff);
+  }
+  for(const f of G.fighters){ makeTag(f); spawn(f); }
+  beginMatch('Последний гриб', 'Останься последним! Ломай ящики — в них сила');
+}
+function beginMatch(title, sub){
+  const me = G.me;
+  CAM.yaw = me.aim; CAM.x = me.x; CAM.z = me.z; CAM.pitch = -0.08;
   G.state = 'countdown'; countT = 3.2; lastCount = 4; endT = 0;
   $('menu').hidden = true; $('end').hidden = true; $('hud').hidden = false;
   $('touch').hidden = !TOUCH; $('superpc').hidden = TOUCH; $('ammopc').hidden = TOUCH; document.body.classList.toggle('touch-on', TOUCH);
   $('lockhint').hidden = TOUCH;
-  announce('Споры', 'Собери 10 спор и удержи их 15 секунд', 'sun', 2.4);
+  const br = G.mode === 'br';
+  $('ico0').className = br ? 'shroom-ico' : 'gem-ico'; $('ico1').className = br ? 'gem-ico gold' : 'gem-ico';
+  announce(title, sub, 'sun', 2.4);
 }
 function countdown(dt){
   countT -= dt;
@@ -125,7 +160,35 @@ function countdown(dt){
   if(n !== lastCount && n >= 1 && n <= 3){ lastCount = n; announce(String(n), '', 'sun', 0.8); sfx('countdown'); }
   if(countT <= 0){ G.state = 'play'; announce('В бой!', '', 'sun', 1); sfx('start'); }
 }
+// look at the hero from the front, from whichever side has no hedge in the way
+// (in the narrow maze there may be no clear 5 m anywhere: then take the longest gap and move the camera in)
+function frontYaw(f){
+  let best = f.V.yaw, bs = -1e9; G.endDist = 4.6;
+  for(let i = 0; i < 16; i++){
+    const d = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * TAU / 16, a = f.V.yaw + d;
+    const t = segHit(f.x, f.z, f.x + Math.sin(a) * 5, f.z + Math.cos(a) * 5, blocksSight), len = t < 0 ? 5 : t * 5;
+    const sc = len - Math.abs(d) * 0.35;
+    if(sc > bs){ bs = sc; best = a; G.endDist = Math.max(1.8, Math.min(4.6, len - 0.4)); }
+    if(len >= 5 && Math.abs(d) < 1.3) break;
+  }
+  return best;
+}
+function endRoyale(){
+  G.state = 'end'; endT = 0;
+  const me = G.me, M = G.match, win = M.place === 1;
+  G.result = win ? 'win' : 'lose';
+  for(const f of G.fighters){ f.inp.mx = f.inp.mz = 0; f.inp.fire = f.inp.sup = false; }
+  // the camera visits you if you won, otherwise whoever knocked you out (or anyone still standing)
+  const k = me.lastHitBy;
+  G.endFocus = win ? me : k && k.alive ? k : G.fighters.filter(f => f.alive).sort((a, b) => b.kills - a.kills)[0] || me;
+  G.endYaw = frontYaw(G.endFocus);
+  if(win){ me.victory = true; me.aim = G.endYaw; }
+  announce(win ? 'Победа!' : placeText(M.place), win ? 'Ты — последний гриб!' : '', win ? 'sun' : 'foe', 2.2);
+  sfx(win ? 'win' : 'lose');
+  releaseLock();
+}
 function endMatch(team){
+  if(G.match && G.match.mode === 'br') return endRoyale();
   G.state = 'end'; endT = 0;
   const me = G.me, res = team < 0 ? 'draw' : team === me.team ? 'win' : 'lose';
   G.result = res;
@@ -137,12 +200,7 @@ function endMatch(team){
   // the camera visits the best fighter of the winning side (you, if you won)
   const score = f => f.kills * 3 + f.dmgDone / 1500 + (f.gemsPicked || 0) * 0.6;
   G.endFocus = team < 0 || team === me.team ? me : G.fighters.filter(f => f.team === team).sort((a, b) => score(b) - score(a))[0];
-  // look at the hero from the front, from whichever side has no hedge in the way
-  G.endYaw = G.endFocus.V.yaw;
-  for(const d of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8, 2.6, -2.6, Math.PI]){
-    const a = G.endFocus.V.yaw + d, f = G.endFocus;
-    if(segHit(f.x, f.z, f.x + Math.sin(a) * 5, f.z + Math.cos(a) * 5) < 0){ G.endYaw = a; break; }
-  }
+  G.endYaw = frontYaw(G.endFocus);
   for(const f of G.fighters) if(f.victory) f.aim = G.endYaw;
   announce(res === 'win' ? 'Победа!' : res === 'lose' ? 'Поражение' : 'Ничья', '', res === 'win' ? 'sun' : res === 'lose' ? 'foe' : 'ally', 2.2);
   sfx(res === 'lose' ? 'lose' : 'win');
@@ -156,6 +214,9 @@ const nameOf = f => `<b style="color:${f === G.me ? 'var(--sun)' : f.team === G.
 on('kill', (o, src) => {
   if(!G.me) return;
   if(src && src !== o) feed(nameOf(src) + ' ⚔ ' + nameOf(o), src === G.me ? 'm' : src.team === G.me.team ? 'a' : 'f');
+  else if(!src) feed('☁ ' + nameOf(o), 'f');
+  if(G.match && G.match.mode === 'br' && o !== G.me && !G.match.over && G.me.alive) announceLeft();
+  if(G.state === 'end') return;   // the last knockout already ended the match: keep the result on screen
   if(src === G.me && o !== G.me){ announce('Срезал!', o.name, 'sun', 1.1); sfx('kill'); }
   if(o === G.me) announce('Тебя срезали', src ? src.name : '', 'foe', 1.6);
 });
@@ -164,6 +225,15 @@ on('countdownStart', team => { const ours = team === G.me.team; announce(ours ? 
 on('countdownStop', () => { if(G.state === 'play') announce('Отсчёт сброшен', '', 'sun', 1.2); });
 on('countdownTick', n => { if(n <= 5) sfx('countdown', null, 0.8); });
 on('matchOver', team => endMatch(team));
+// «Последний гриб» events
+on('fogHurt', (f, amt) => damage(f, amt, null, false, true));
+on('fogStart', () => { if(G.state === 'play'){ announce('Туман сгущается!', 'Держись ближе к центру', 'ally', 2); sfx('gem_drop'); } });
+on('power', f => { f.gemsPicked = (f.gemsPicked || 0) + 1; });
+let leftShown = 0;
+function announceLeft(){
+  const n = G.match.alive;
+  if(n <= 3 && n !== leftShown && n > 1){ leftShown = n; announce(L.lang === 'en' ? n + ' left' : 'Осталось ' + n, '', 'sun', 1.2); }
+}
 on('superReady', f => { if(f === G.me) sfx('super_ready'); });
 on('empty', f => { if(f === G.me) sfx('empty'); });
 on('damage', (o, amt, src) => { if(o === G.me) sfx('hurt', null, 0.7); else if(src === G.me) sfx('hit', null, 0.6); });
@@ -193,7 +263,7 @@ function tick(dt){
     for(const f of G.fighters) if(f.bot && G.state === 'play') botThink(f, dt);
     for(const f of G.fighters) stepFighter(f, dt);
     updateShots(dt); updateLobs(dt); updatePuddles(dt); updateBeams(dt);
-    updateSpores(dt, G.time);
+    updateSpores(dt, G.time); updateRoyale(dt, G.time);
     if(G.state === 'end'){ endT += dt; if(endT > 2.6 && $('end').hidden){ showEnd(G.result); $('hud').hidden = true; } }
   }
   updateFighterVisuals(dt, G.time);
@@ -214,7 +284,8 @@ function tick(dt){
     camera.lookAt(f.x + off, 0.75, f.z);
   } else if(G.state === 'end' && G.me){
     const f = G.endFocus || G.me, a = G.endYaw + Math.sin(G.time * 0.3) * 0.35;
-    endCam.set(f.x + Math.sin(a) * 4.6, 2.7, f.z + Math.cos(a) * 4.6);
+    const ed = G.endDist || 4.6;
+    endCam.set(f.x + Math.sin(a) * ed, 2.7 + (4.6 - ed) * 0.35, f.z + Math.cos(a) * ed);
     camera.position.lerp(endCam, 1 - Math.exp(-dt * 2.5));
     camera.lookAt(f.x, 0.8, f.z);
   } else if(G.me) updateCamera(dt);
@@ -243,10 +314,10 @@ requestAnimationFrame(frame);
 
 // ---------------- test hooks (used by tools/test.mjs) ----------------
 window.__bg = {
-  start(o = {}){ if(o.hero) MENU.hero = o.hero; if(o.diff) MENU.diff = o.diff; startMatch(o); if(o.skipCount){ countT = 0; G.state = 'play'; } },
+  start(o = {}){ if(o.hero) MENU.hero = o.hero; if(o.diff) MENU.diff = o.diff; if(o.mode) MENU.mode = o.mode; startMatch(o); if(o.skipCount){ countT = 0; G.state = 'play'; } },
   autopilot(on){ if(G.me) G.me.bot = on ? newBot('normal') : null; },
   sim(sec, step = 1 / 30){ const n = Math.round(sec / step); for(let i = 0; i < n; i++){ tick(step); if(G.state === 'end' && endT > 3) break; } },
-  get s(){ const M = G.match; return { state:G.state, t:M && +M.t.toFixed(1), count:M && [...M.count], cd:M && M.cd && { team:M.cd.team, t:+M.cd.t.toFixed(1) }, over:M && M.over, winner:M && M.winner, why:M && M.why, pickups:G.pickups.length,
+  get s(){ const M = G.match; return { state:G.state, mode:M && M.mode, t:M && +M.t.toFixed(1), count:M && [...M.count], alive:M && M.alive, place:M && M.place, fog:M && M.fog && +M.fog.r.toFixed(1), cd:M && M.cd && { team:M.cd.team, t:+M.cd.t.toFixed(1) }, over:M && M.over, winner:M && M.winner, why:M && M.why, pickups:G.pickups.length,
     me:G.me && { hp:Math.round(G.me.hp), alive:G.me.alive, x:+G.me.x.toFixed(1), z:+G.me.z.toFixed(1), gems:G.me.gems, charge:+G.me.charge.toFixed(2), ammo:+G.me.ammo.toFixed(2) } }; },
   board:() => G.fighters.map(f => `${f.name}[${f.hero}/t${f.team}] k${f.kills} d${f.deaths} g${f.gemsPicked} dmg${Math.round(f.dmgDone)}`),
   fighters:() => G.fighters, G, A, CAM, menu:MENU, showMenu, cam(a){ G.dbgCam = a; },

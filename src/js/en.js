@@ -29,6 +29,11 @@ export const EN = {
   // end of match
   'Победа!':'Victory!', 'Поражение':'Defeat', 'Ничья':'Draw', 'Ещё бой':'Play again', 'В меню':'Menu',
   'Твоя команда удержала споры.':'Your team held the spores.', 'Враги удержали споры.':'The enemies held the spores.', 'Время вышло: ':'Time is up: ',
+  // «Последний гриб» (battle royale)
+  'Последний гриб':'Last Shroom', 'каждый сам за себя · 10 бойцов в лабиринте, туман сжимается':'every fighter for themselves · 10 fighters in a maze, the fog closes in',
+  'Останься последним! Ломай ящики — в них сила':'Be the last one standing! Break crates to power up', 'Туман':'Fog', 'Туман идёт':'Fog moving', 'Финал':'Final',
+  'Туман сгущается!':'The fog is closing in!', 'Держись ближе к центру':'Stay close to the middle', 'Ты — последний гриб!':'You are the last shroom standing!',
+  'Тебя срезал: ':'Knocked out by ', 'Тебя накрыл ядовитый туман.':'The poison fog got you.', 'Лесной лабиринт':'Forest Maze',
   // bot names
   'Груздь':'Milkcap', 'Опёнок':'Honeycap', 'Сморчок':'Morel', 'Рыжик':'Saffron', 'Маслёнок':'Butterball', 'Волнушка':'Woolly', 'Строчок':'Brainy', 'Белянка':'Whitey',
   'Ежовик':'Hedgehog', 'Дубовик':'Oakcap', 'Вешенка':'Oyster', 'Короед':'Bark Beetle', 'Шершень':'Hornet', 'Жужелица':'Ground Beetle', 'Щелкун':'Clicker',

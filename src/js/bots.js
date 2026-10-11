@@ -1,6 +1,7 @@
 // Bot brains for «Споры»: collect spores, fight at their weapon's best range, protect carriers, run home when hurt.
 import { G } from './state.js';
-import { A, findPath, losClear, walkClear, inGrass, tileAtXZ, sightClear } from './arena.js';
+import { A, findPath, losClear, walkClear, inGrass, tileAtXZ, sightClear, segHit, colOf, rowOf } from './arena.js';
+import { fogR, fogAhead } from './royale.js';
 import { canSee, canAttack } from './combat.js';
 import { rand, clamp, angDiff, TAU } from './util.js';
 
@@ -39,11 +40,20 @@ export function botThink(f, dt){
     if(canSee(f, o)){ B.mem.set(o.id, { x:o.x, z:o.z, t:now, o }); }
     else continue;
     const d = dist(f, o);
-    const score = -d + (o.gems || 0) * 1.2 + (1 - o.hp / o.max) * 4 + (o === B.target ? 2 : 0);
+    const score = -d + (o.gems || 0) * 1.2 + (o.power || 0) * 0.5 + (1 - o.hp / o.max) * 4 + (o === B.target ? 2 : 0);
     if(score > bestScore){ bestScore = score; best = o; }
   }
   if(best !== B.target){ B.target = best; B.seenT = 0; } else B.seenT += dt;
   const T = B.target;
+  B.shootAt = null;
+  let mx = 0, mz = 0;
+  if(M.mode === 'br') [mx, mz] = royaleGoal(f, B, T, dt);
+  else [mx, mz] = sporesGoal(f, B, T, dt);
+  fightMoveAndShoot(f, B, T, mx, mz, dt);
+}
+
+function sporesGoal(f, B, T, dt){
+  const H = f.H, M = G.match, now = G.time;
   const myCount = M.count[f.team], foeCount = M.count[1 - f.team];
   const home = A.spawns[f.team][1] || A.spawns[f.team][0];
   // ---- goal ----
@@ -74,14 +84,89 @@ export function botThink(f, dt){
     // go after the enemy carrier with the most spores (last place we saw them)
     let c = null; for(const o of G.fighters) if(o.alive && o.team !== f.team && (!c || o.gems > c.gems)) c = o;
     const m = c && B.mem.get(c.id);
-    const tx = m && now - m.t < 4 ? m.x : A.mine.x, tz = m && now - m.t < 4 ? m.z : A.mine.z + (f.team === 0 ? -4 : 4);
+      const mid = A.mine || { x:0, z:0 };
+    const tx = m && now - m.t < 4 ? m.x : mid.x, tz = m && now - m.t < 4 ? m.z : mid.z + (f.team === 0 ? -4 : 4);
     [mx, mz] = goTo(f, tx, tz, dt);
   } else if(B.mode === 'patrol'){
     // hold a spot near the mine on our own side, spread out by slot
     const side = f.team === 0 ? 1 : -1;
-    const px = A.mine.x + (f.slot - 1) * 3.2, pz = A.mine.z + side * (2.5 + (f.slot === 1 ? 0 : 1.5));
+    const mid = A.mine || { x:0, z:0 };
+    const px = mid.x + (f.slot - 1) * 3.2, pz = mid.z + side * (2.5 + (f.slot === 1 ? 0 : 1.5));
     [mx, mz] = goTo(f, px, pz, dt);
   }
+  return [mx, mz];
+}
+
+// «Последний гриб»: stay ahead of the fog, break crates and grab power, pick fights you can win
+function royaleGoal(f, B, T, dt){
+  const H = f.H, now = G.time, R = fogR(), soon = fogAhead(6);
+  const rc = Math.hypot(f.x, f.z);
+  B.thinkT -= dt;
+  if(B.thinkT <= 0){
+    B.thinkT = rand(0.25, 0.4);
+    const hurt = f.hp < f.max * 0.38;
+    B.crate = null; B.pk = null;
+    if(rc > Math.min(R, soon) - 2.5) B.mode = 'zone';
+    else if(hurt && T && dist(f, T) < 7 && f.hp < T.hp) B.mode = 'retreat';
+    else if(T && dist(f, T) < H.attack.range * 1.35) B.mode = 'fight';
+    else {
+      // the nearest power spore or crate that lies inside the safe area
+      let pk = null, pd = 13;
+      for(const p of G.pickups){ const d = Math.hypot(p.x - f.x, p.z - f.z); if(d < pd && Math.hypot(p.x, p.z) < soon - 1.5){ pd = d; pk = p; } }
+      if(pk){ B.mode = 'collect'; B.pk = pk; }
+      else {
+        let kc = null, kd = 15;
+        for(const k of A.crates){ if(!k.alive) continue; const d = Math.hypot(k.x - f.x, k.z - f.z); if(d < kd && Math.hypot(k.x, k.z) < soon - 1.5){ kd = d; kc = k; } }
+        let seen = null; for(const m of B.mem.values()) if(m.o.alive && now - m.t < 5 && (!seen || m.t > seen.t)) seen = m;
+        if(kc && !(seen && f.hp > f.max * 0.7 && rand() < 0.3)){ B.mode = 'crate'; B.crate = kc; }
+        else if(seen && f.hp > f.max * 0.6){ B.mode = 'hunt'; B.huntX = seen.x; B.huntZ = seen.z; }
+        else B.mode = 'roam';
+      }
+    }
+  }
+  if(B.mode === 'zone'){
+    // head for a spot well inside the circle, on our side of the middle
+    const k = Math.max(0, Math.min(R, soon) * 0.45) / (rc || 1);
+    return goTo(f, f.x * k, f.z * k, dt);
+  }
+  if(B.mode === 'retreat' && T){
+    // run away from the threat, but never out into the fog
+    const d = dist(f, T) || 1;
+    let ax = f.x + (f.x - T.x) / d * 5, az = f.z + (f.z - T.z) / d * 5;
+    const ra = Math.hypot(ax, az), lim = Math.max(2, Math.min(R, soon) - 3);
+    if(ra > lim){ ax *= lim / ra; az *= lim / ra; }
+    return goTo(f, ax, az, dt);
+  }
+  if(B.mode === 'collect' && B.pk && G.pickups.includes(B.pk)) return goTo(f, B.pk.x, B.pk.z, dt);
+  if(B.mode === 'crate' && B.crate && B.crate.alive){
+    const k = B.crate, d = Math.hypot(k.x - f.x, k.z - f.z), want = Math.min(H.attack.range * 0.7, 6);
+    // a clear shot means the first thing the ray meets is the crate itself
+    const t = segHit(f.x, f.z, k.x, k.z), hx = f.x + (k.x - f.x) * t, hz = f.z + (k.z - f.z) * t;
+    const clear = t < 0 || (colOf(hx + (k.x - f.x) / (d || 1) * 0.08) === k.c && rowOf(hz + (k.z - f.z) / (d || 1) * 0.08) === k.r);
+    if(d < want + 0.5 && (clear || H.attack.kind === 'lob')){ B.shootAt = k; return [Math.sin(now * 1.7 + f.id) * 0.3, Math.cos(now * 1.3 + f.id) * 0.3]; }
+    return goTo(f, k.x, k.z, dt);
+  }
+  if(B.mode === 'hunt'){
+    if(Math.hypot(B.huntX - f.x, B.huntZ - f.z) > 1.2) return goTo(f, B.huntX, B.huntZ, dt);
+    B.thinkT = 0;
+  }
+  if(B.mode === 'roam' || B.mode === 'hunt'){
+    // wander between random open spots inside the safe area
+    if(!B.wp || now > B.wpT || Math.hypot(B.wp.x - f.x, B.wp.z - f.z) < 1.2 || Math.hypot(B.wp.x, B.wp.z) > soon - 2){
+      const lim = Math.max(2, soon - 3);
+      for(let i = 0; i < 12; i++){
+        const a = rand(0, TAU), r = Math.sqrt(rand()) * lim, x = Math.sin(a) * r, z = Math.cos(a) * r;
+        if(tileAtXZ(x, z) === '.' || tileAtXZ(x, z) === '"'){ B.wp = { x, z }; break; }
+      }
+      B.wpT = now + rand(5, 8);
+    }
+    if(B.wp) return goTo(f, B.wp.x, B.wp.z, dt);
+  }
+  return [0, 0];
+}
+
+function fightMoveAndShoot(f, B, T, mx, mz, dt){
+  const H = f.H, inp = f.inp, now = G.time;
   // ---- fighting: keep the weapon's best distance and strafe ----
   if(T && (B.mode === 'fight' || dist(f, T) < H.attack.range)){
     const d = dist(f, T), want = H.attack.range * PREF[f.hero];
@@ -136,6 +221,11 @@ export function botThink(f, dt){
       const spare = f.ammo >= 2 || d < W.range * 0.6 || T.hp < T.max * 0.4;
       if(inRange && (los || W.kind === 'lob') && spare) inp.fire = true;
     }
+  } else if(B.shootAt){
+    // break the crate in front of us (no reason to keep a charge in reserve here)
+    const k = B.shootAt;
+    inp.aim = Math.atan2(k.x - f.x, k.z - f.z); inp.tx = k.x; inp.tz = k.z;
+    if(canAttack(f) && f.ammo >= 1) inp.fire = true;
   } else if(f.hero === 'beetle' && canAttack(f) && f.ammo >= 2.5){
     // bomb the bush where an enemy was last seen
     for(const m of B.mem.values()){
