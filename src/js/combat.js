@@ -8,7 +8,7 @@ import { collide, segHit, inGrass, A, blocksMove, tileAtXZ, sightClear } from '.
 import { glow, smoke, puff, explosion, hitSpark, sporeBurst, dmgNumber, dust, ring } from './fx.js';
 import { clamp, rand, TAU, lerp } from './util.js';
 import { sfx } from './audio.js';
-import { damageCrateAt, damageCratesIn, damageCrate } from './royale.js';
+import { damageCrateAt, damageCratesIn, damageCrate, ROYALE } from './royale.js';
 
 export const SHOT_Y = 0.75;
 export const REGEN_DELAY = 3, REGEN_RATE = 0.13;
@@ -39,7 +39,7 @@ export function lookFor(f){ return f === G.me ? 'me' : G.me && f.team === G.me.t
 export function spawn(f, at){
   const list = A.spawns[f.team] || A.spawns.ffa;
   const p = at || list[(f.slot ?? 0) % list.length];
-  if(!at){ f.power = 0; f.pow = f.pow0; f.max = Math.round(f.H.hp * f.pow0); }
+  if(!at){ f.power = 0; f.pow = f.pow0; f.max = Math.round(f.H.hp * f.pow0 * (f.hpMul || 1)); }
   f.x = p.x; f.z = p.z; f.vx = f.vz = f.kx = f.kz = 0;
   f.alive = true; f.hp = f.max; f.ammo = AMMO; f.cdT = 0; f.deadT = 0; f.spawnT = 0; f.shieldT = SPAWN_SHIELD; f.regenT = 0;
   // face the enemy side (or the middle of the map when everyone is on their own)
@@ -364,8 +364,10 @@ export function updateBeams(dt){
 // ---------------- damage, death ----------------
 export function damage(o, amount, src, isSuper, quiet){
   if(!o.alive || o.shieldT > 0 || amount <= 0 || (G.match && G.match.over)) return 0;
+  // fighters hit softer in «Последний гриб» (no respawns: fights last long enough to run, hide and heal)
+  if(src && G.match && G.match.mode === 'br') amount *= ROYALE.dmg;
   amount = Math.round(amount);
-  o.hp -= amount; o.flash = 1; o.regenT = 0; o.revealT = Math.max(o.revealT, 0.6); o.lastHitBy = src;
+  o.hp -= amount; o.flash = 1; o.hurtAt = G.time; o.regenT = 0; o.revealT = Math.max(o.revealT, 0.6); o.lastHitBy = src;
   if(src && src.team !== o.team){ o.spot = o.spot || {}; o.spot[src.team] = SPOT_T; }
   if(src){
     src.dmgDone += amount; src.regenT = Math.min(src.regenT, REGEN_DELAY * 0.5);

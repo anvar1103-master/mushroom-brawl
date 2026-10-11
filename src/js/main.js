@@ -137,7 +137,7 @@ function startRoyaleMatch(opts){
   for(let i = 0; i < ROYALE.fighters; i++){
     const isMe = i === 0;
     const f = makeFighter({ name:isMe ? tr('Ты') : tr(names.pop()), team:i, hero:isMe ? myHero : HERO_IDS[Math.floor(Math.random() * HERO_IDS.length)], isMe });
-    f.slot = spots[i % spots.length]; f.gemsPicked = 0;
+    f.slot = spots[i % spots.length]; f.gemsPicked = 0; f.hpMul = ROYALE.hp;
     if(isMe) G.me = f; else f.bot = newBot(opts.diff || MENU.diff);
   }
   for(const f of G.fighters){ makeTag(f); spawn(f); }
@@ -230,9 +230,14 @@ on('fogHurt', (f, amt) => damage(f, amt, null, false, true));
 on('fogStart', () => { if(G.state === 'play'){ announce('Туман сгущается!', 'Держись ближе к центру', 'ally', 2); sfx('gem_drop'); } });
 on('power', f => { f.gemsPicked = (f.gemsPicked || 0) + 1; });
 let leftShown = 0;
+// nudges toward playing for the place: hide and let the others thin out
 function announceLeft(){
   const n = G.match.alive;
-  if(n <= 3 && n !== leftShown && n > 1){ leftShown = n; announce(L.lang === 'en' ? n + ' left' : 'Осталось ' + n, '', 'sun', 1.2); }
+  if(n > 4 || n <= 1 || n === leftShown) return;
+  leftShown = n;
+  if(n === 4) announce(L.lang === 'en' ? '4 left' : 'Осталось 4 бойца', 'Займи укрытие', 'sun', 1.6);
+  else if(n === 3) announce('Ты в топ-3!', 'Пусть другие дерутся первыми', 'sun', 1.6);
+  else announce('Финал!', 'Один на один', 'foe', 1.6);
 }
 on('superReady', f => { if(f === G.me) sfx('super_ready'); });
 on('empty', f => { if(f === G.me) sfx('empty'); });

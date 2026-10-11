@@ -8,8 +8,12 @@ import { glow, smoke, puff, ring, sporeBurst, dmgNumber } from './fx.js';
 import { rand, TAU, clamp } from './util.js';
 import { sfx } from './audio.js';
 
-// fog: waits, then shrinks to a small circle in the middle; damage grows the longer the match lasts
-export const ROYALE = { fighters:10, wait:20, shrink:105, r1:3.5, dps:650, dpsGrow:6, power:{ dmg:0.1, hp:400 } };
+// fog: waits, then shrinks to a small circle in the middle; damage grows the longer the match lasts.
+// It closes slowly while the field is full and hurries once only a few fighters are left, so the last ones meet in
+// a small circle instead of a long one-on-one in an open maze. Everyone has extra health here (no respawns).
+export const ROYALE = { fighters:10, wait:25, shrink:120, r1:3.5, dps:650, dpsGrow:6, hp:1.6, dmg:0.75, calm:40, power:{ dmg:0.1, hp:400 } };
+// fog speed by fighters left
+const fogPace = n => n >= 8 ? 0.75 : n >= 6 ? 1 : n >= 4 ? 1.5 : n === 3 ? 2.2 : 3;
 
 // ---------------- fog visuals: a glowing wall on the edge and a tinted floor outside it ----------------
 const FOG = { group:null, wall:null, floor:null, u:{ uR:{ value:40 }, uTime:{ value:0 } } };
@@ -126,10 +130,10 @@ export const fogR = () => G.match && G.match.mode === 'br' ? G.match.fog.r : 1e9
 // where the fog will be a few seconds from now (bots plan ahead)
 export function fogAhead(sec){
   const M = G.match; if(!M || M.mode !== 'br') return 1e9;
-  const F = M.fog, t = M.t + sec;
-  if(t < ROYALE.wait) return F.r0;
-  return Math.max(ROYALE.r1, F.r0 - (F.r0 - ROYALE.r1) * Math.min(1, (t - ROYALE.wait) / ROYALE.shrink));
+  const F = M.fog, run = Math.max(0, M.t + sec - Math.max(M.t, ROYALE.wait));
+  return Math.max(ROYALE.r1, F.r - fogSpeed(M) * run);
 }
+const fogSpeed = M => (M.fog.r0 - ROYALE.r1) / ROYALE.shrink * fogPace(M.alive);
 
 const P = { x:0, z:0 };
 export function updateRoyale(dt, t){
@@ -140,7 +144,8 @@ export function updateRoyale(dt, t){
   if(G.state === 'play' && !M.over){
     M.t += dt;
     const was = F.shrinking;
-    F.r = fogAhead(0); F.shrinking = M.t >= ROYALE.wait && F.r > ROYALE.r1;
+    if(M.t >= ROYALE.wait) F.r = Math.max(ROYALE.r1, F.r - fogSpeed(M) * dt);
+    F.shrinking = M.t >= ROYALE.wait && F.r > ROYALE.r1;
     if(F.shrinking && !was) emit('fogStart');
     // fog damage, twice a second
     F.tick -= dt;

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { camera } from './engine.js';
 import { G } from './state.js';
-import { $, esc, TOUCH, clamp } from './util.js';
+import { $, esc, TOUCH, clamp, store } from './util.js';
 import { HEROES, HERO_IDS, ICONS, AMMO } from './heroes.js';
 import { lookFor, spotted } from './combat.js';
 import { AIM } from './player.js';
@@ -157,6 +157,7 @@ export function showEnd(result){
   $('end').hidden = false;
 }
 
+const ROYALE_PTS = [20, 15, 12, 9, 7, 5, 3, 2, 1, 0], ROYALE_TOTAL = { v:0 };
 // «Последний гриб»: your place, who got you, and everyone ordered by how long they lasted
 function showEndRoyale(result){
   const me = G.me, M = G.match, t = $('e-title');
@@ -164,7 +165,11 @@ function showEndRoyale(result){
   t.textContent = result === 'win' ? tr('Победа!') : place(M.place);
   t.className = M.place <= 3 ? 'win' : 'lose';
   const k = me.lastHitBy;
-  $('e-sub').textContent = result === 'win' ? tr('Ты — последний гриб!') : k && k !== me ? tr('Тебя срезал: ') + k.name : tr('Тебя накрыл ядовитый туман.');
+  // points: the place counts most, knockouts add a little (kept for progression later)
+  const pts = ROYALE_PTS[M.place - 1] || 0, kb = Math.min(3, me.kills);
+  if(!M.scored){ M.scored = true; ROYALE_TOTAL.v = (+store.get('brPts', 0) || 0) + pts + kb; store.set('brPts', ROYALE_TOTAL.v); }
+  $('e-sub').textContent = (result === 'win' ? tr('Ты — последний гриб!') : k && k !== me ? tr('Тебя срезал: ') + k.name : tr('Тебя накрыл ядовитый туман.')) +
+    ' · ' + tr('Очки') + ': +' + pts + (kb ? ' +' + kb + ' ⚔' : '') + ' (' + tr('всего') + ' ' + ROYALE_TOTAL.v + ')';
   const rows = [...G.fighters].sort((a, b) => (a.place || 0) - (b.place || 0) || b.kills - a.kills);
   const pw = '<span class="gem-ico gold"></span>';
   $('e-board').classList.add('br');
