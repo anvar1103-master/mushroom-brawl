@@ -2,6 +2,7 @@
 import { G } from './state.js';
 import { A, findPath, losClear, walkClear, inGrass, tileAtXZ, sightClear, segHit, colOf, rowOf } from './arena.js';
 import { fogR, fogAhead, ROYALE } from './royale.js';
+import { goalOf } from './football.js';
 import { canSee, canAttack } from './combat.js';
 import { bankShot } from './player.js';
 import { rand, clamp, angDiff, TAU } from './util.js';
@@ -41,16 +42,70 @@ export function botThink(f, dt){
     if(canSee(f, o)){ B.mem.set(o.id, { x:o.x, z:o.z, t:now, o }); }
     else continue;
     const d = dist(f, o);
-    const score = -d + (o.gems || 0) * 1.2 + (o.power || 0) * 0.5 + (1 - o.hp / o.max) * 4 + (o === B.target ? 2 : 0);
+    const score = -d + (o.gems || 0) * 1.2 + (G.ball && G.ball.holder === o ? 6 : 0) + (o.power || 0) * 0.5 + (1 - o.hp / o.max) * 4 + (o === B.target ? 2 : 0);
     if(score > bestScore){ bestScore = score; best = o; }
   }
   if(best !== B.target){ B.target = best; B.seenT = 0; } else B.seenT += dt;
   const T = B.target;
   B.shootAt = null;
   let mx = 0, mz = 0;
+  B.kick = null;
   if(M.mode === 'br') [mx, mz] = royaleGoal(f, B, T, dt);
+  else if(M.mode === 'ball') [mx, mz] = footballGoal(f, B, T, dt);
   else [mx, mz] = sporesGoal(f, B, T, dt);
   fightMoveAndShoot(f, B, T, mx, mz, dt);
+  // the ball carrier never shoots: the button kicks, so it only fires for a planned shot or pass
+  if(G.ball && G.ball.holder === f){
+    inp.fire = inp.sup = false;
+    if(B.kick){ inp.tx = B.kick.x; inp.tz = B.kick.z; inp.aim = Math.atan2(B.kick.x - f.x, B.kick.z - f.z); if(B.kick.sup && f.charge >= 1) inp.sup = true; else inp.fire = true; }
+  }
+}
+
+// «Дождевикбол»: carry the ball toward their goal and shoot through a clear lane; pass when pressed;
+// the closest teammate chases a loose ball, two press an enemy carrier, slot 0 guards our goal, the rest get open
+// a kick lane: no hedge in the way and no enemy standing near the line
+function laneClear(f, x1, z1){
+  if(segHit(f.x, f.z, x1, z1) >= 0) return false;
+  const dx = x1 - f.x, dz = z1 - f.z, l2 = dx * dx + dz * dz || 1;
+  for(const o of G.fighters){
+    if(!o.alive || o.team === f.team) continue;
+    const t = clamp(((o.x - f.x) * dx + (o.z - f.z) * dz) / l2, 0, 1), px = f.x + dx * t - o.x, pz = f.z + dz * t - o.z;
+    if(t > 0.05 && px * px + pz * pz < 1.2 * 1.2) return false;
+  }
+  return true;
+}
+function footballGoal(f, B, T, dt){
+  const b = G.ball, M = G.match, now = G.time; if(!b || M.resetT > 0) return [0, 0];
+  const mine = goalOf(f.team), theirs = goalOf(1 - f.team);
+  const mates = G.fighters.filter(o => o.team === f.team && o.alive), holder = b.holder;
+  const toGoal = o => Math.hypot(theirs.x - o.x, theirs.z - o.z);
+  if(holder === f){
+    B.mode = 'carry';
+    // aim at a corner of the goal the keeper isn't covering
+    const gx = theirs.x + (rand() < 0.5 ? -1 : 1) * rand(0.8, 2.6), dg = toGoal(f), clear = laneClear(f, gx, theirs.z);
+    if(dg < 9.5 && clear){ B.kick = { x:gx, z:theirs.z, sup:f.charge >= 1 && dg > 6 }; return [0, 0]; }
+    const threat = G.fighters.some(o => o.alive && o.team !== f.team && Math.hypot(o.x - f.x, o.z - f.z) < 3.5);
+    if(threat && now > (B.passT || 0)){
+      const mate = mates.filter(o => o !== f && toGoal(o) < dg + 2 && Math.hypot(o.x - f.x, o.z - f.z) < 12 && laneClear(f, o.x, o.z)).sort((a, c) => toGoal(a) - toGoal(c))[0];
+      if(mate){ B.kick = { x:mate.x + mate.vx * 0.35, z:mate.z + mate.vz * 0.35 }; B.passT = now + 1.2; return [0, 0]; }
+      if(dg < 14 && clear){ B.kick = { x:gx, z:theirs.z, sup:f.charge >= 1 }; return [0, 0]; }
+    }
+    return goTo(f, theirs.x, theirs.z, dt);
+  }
+  const order = mates.slice().sort((a, c) => Math.hypot(a.x - b.x, a.z - b.z) - Math.hypot(c.x - b.x, c.z - b.z)), rank = order.indexOf(f);
+  const dBall = Math.hypot(b.x - f.x, b.z - f.z);
+  if(!holder && (rank === 0 || (rank === 1 && dBall < 7))){ B.mode = 'ball'; return goTo(f, b.x + b.vx * 0.3, b.z + b.vz * 0.3, dt); }
+  if(holder && holder.team !== f.team && (rank <= 1 || Math.hypot(holder.x - mine.x, holder.z - mine.z) < 10)){ B.mode = 'press'; return goTo(f, holder.x, holder.z, dt); }
+  if(f.slot === 0){
+    // stand between the ball and our goal; come out for a ball that rolls close
+    if(!holder && Math.hypot(b.x - mine.x, b.z - mine.z) < 8){ B.mode = 'ball'; return goTo(f, b.x, b.z, dt); }
+    B.mode = 'guard'; const k = 0.16;
+    return goTo(f, mine.x + (b.x - mine.x) * k, mine.z + (b.z - mine.z) * k, dt);
+  }
+  // get open up the pitch, one lane to each side
+  B.mode = 'support';
+  const side = f.slot === 1 ? -1 : 1, sx = b.x + (theirs.x - b.x) * 0.45 + side * 4, sz = b.z + (theirs.z - b.z) * 0.45;
+  return goTo(f, clamp(sx, -A.hx + 2, A.hx - 2), sz, dt);
 }
 
 function sporesGoal(f, B, T, dt){

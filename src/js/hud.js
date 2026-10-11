@@ -60,7 +60,7 @@ export function updateHud(){
     setText('mode-lbl', tr(wait > 0 ? 'Туман' : M.fog.r > ROYALE.r1 ? 'Туман идёт' : 'Финал'));
   } else {
     setText('sc0', M.count[mt]); setText('sc1', M.count[1 - mt]);
-    setText('timer', fmt(M.dur - M.t)); setText('mode-lbl', tr('Споры'));
+    setText('timer', M.golden ? '⚽' : fmt(M.dur - M.t)); setText('mode-lbl', tr(M.mode === 'ball' ? (M.golden ? 'Золотой гол' : 'Дождевикбол') : 'Споры'));
   }
   const cd = $('cdown');
   if(M.cd && !M.over && !br){
@@ -150,12 +150,13 @@ export function showEnd(result){
   const t = $('e-title');
   t.textContent = tr(result === 'win' ? 'Победа!' : result === 'lose' ? 'Поражение' : 'Ничья');
   t.className = result;
-  $('e-sub').textContent = tr(M.why === 'spores' ? (M.winner === me.team ? 'Твоя команда удержала споры.' : 'Враги удержали споры.') : 'Время вышло: ') + (M.why === 'time' ? M.count[me.team] + ' : ' + M.count[1 - me.team] : '');
+  if(M.mode === 'ball') $('e-sub').textContent = tr('Счёт') + ' ' + M.count[me.team] + ' : ' + M.count[1 - me.team];
+  else $('e-sub').textContent = tr(M.why === 'spores' ? (M.winner === me.team ? 'Твоя команда удержала споры.' : 'Враги удержали споры.') : 'Время вышло: ') + (M.why === 'time' ? M.count[me.team] + ' : ' + M.count[1 - me.team] : '');
   // MVP: kills, spores, damage
   const score = f => f.kills * 3 + f.dmgDone / 1500 + (f.gemsPicked || 0) * 0.6;
   const mvp = [...G.fighters].sort((a, b) => score(b) - score(a))[0];
   const rows = [...G.fighters].sort((a, b) => (a.team === me.team ? 0 : 1) - (b.team === me.team ? 0 : 1) || score(b) - score(a));
-  $('e-board').innerHTML = rows.map(f => `<tr class="t${f.team === me.team ? 0 : 1}${f === me ? ' me' : ''}"><td>${ICONS[f.hero]}</td><td>${esc(f.name)}${f === mvp ? '<span class="mvp">MVP</span>' : ''}</td><td>⚔ ${f.kills}</td><td>☠ ${f.deaths}</td><td>${gem} ${f.gemsPicked || 0}</td><td>${Math.round(f.dmgDone)}</td></tr>`).join('');
+  $('e-board').innerHTML = rows.map(f => `<tr class="t${f.team === me.team ? 0 : 1}${f === me ? ' me' : ''}"><td>${ICONS[f.hero]}</td><td>${esc(f.name)}${f === mvp ? '<span class="mvp">MVP</span>' : ''}</td><td>⚔ ${f.kills}</td><td>☠ ${f.deaths}</td><td>${M.mode === 'ball' ? '⚽' : gem} ${f.gemsPicked || 0}</td><td>${Math.round(f.dmgDone)}</td></tr>`).join('');
   $('end').hidden = false;
 }
 

@@ -3,6 +3,7 @@
 //   .  floor        #  hedge wall (blocks moves and shots)     R  rock (cover)     T  stump (cover)
 //   "  tall grass   ~  pond (blocks moves, shots fly over)     r  red spawn        M  spore mine (middle)
 //   ,  flowers (decor only)      C  crate (cover that breaks; holds a power spore)     s  spawn (battle royale)
+//   g  goal mouth of the red team (blue scores here); it becomes h, the blue team's goal, on the player half
 export const TILE = 1.6;
 
 const SPORE_GLADE = {
@@ -25,7 +26,30 @@ const SPORE_GLADE = {
   ]
 };
 
-export const MAPS = { glade:build(SPORE_GLADE), maze:buildMaze(2718) };
+// «Дождевикбол»: a pitch with a goal at each end, low cover and two hedge islands that split the field into lanes
+const PUFF_PITCH = {
+  id:'pitch', name:'Лесное поле', desc:'Поле с воротами из кустов, островками-укрытиями и травой по краям.', mode:'ball',
+  half:[
+    '########ggggg########',
+    '"#.................#"',
+    '""......R...R......""',
+    '.....r....r....r.....',
+    '.....................',
+    '...##...........##...',
+    '"""..............."""',
+    '"""....T.....T...."""',
+    '.........###.........',
+    '.....................',
+    '..##.............##..',
+    '..##.....""".....##..',
+    '.....................',
+    '"".......R.R.......""',
+    '.....................',
+    '""".......M.......'+'"""'
+  ]
+};
+
+export const MAPS = { glade:build(SPORE_GLADE), maze:buildMaze(2718), pitch:build(PUFF_PITCH) };
 
 function build(def){
   const top = def.half;
@@ -33,7 +57,7 @@ function build(def){
   for(const r of top) if(r.length !== W) throw new Error('map ' + def.id + ': row width ' + r.length + ' != ' + W + ' in «' + r + '»');
   const mid = top[top.length - 1];
   if(mid !== [...mid].reverse().join('')) throw new Error('map ' + def.id + ': middle row must be a palindrome');
-  const swap = ch => ch === 'r' ? 'b' : ch;
+  const swap = ch => ch === 'r' ? 'b' : ch === 'g' ? 'h' : ch;
   const bottom = top.slice(0, -1).reverse().map(r => [...r].reverse().map(swap).join(''));
   const rows = [...top, ...bottom];
   return Object.assign({}, def, { rows, W, H:rows.length });

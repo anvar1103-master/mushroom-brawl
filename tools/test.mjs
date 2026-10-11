@@ -49,6 +49,12 @@ console.log('Brawl Green test:', PAGE);
     ok(s.state === 'end' && s.mode === 'br' && s.place >= 1, `${hero}: royale ends (#${s.place}, ${s.t} s, fog ${s.fog} m, ${r.knock} knocked out, ${r.crates} crates, ${r.power} power picked)`);
     ok(r.crates > 0 && r.power > 0, `${hero}: crates break and drop power`);
   }
+  // «Дождевикбол»: a 3 vs 3 bot match that ends with goals scored
+  {
+    await page.evaluate(() => { __bg.start({ mode:'ball', hero:'hopper', skipCount:true }); __bg.autopilot(true); });
+    let s; for(let i = 0; i < 60; i++){ await page.evaluate(() => __bg.sim(5)); s = await page.evaluate(() => __bg.s); if(s.state === 'end') break; }
+    ok(s.state === 'end' && s.mode === 'ball' && s.count[0] + s.count[1] > 0, `football: match ends with goals (${s.count.join(':')}, ${s.t} s, ${s.why})`);
+  }
   ok(errors.length === 0, 'no script errors' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
   ok(outside.length === 0, 'no requests to other sites' + (outside.length ? ': ' + outside.slice(0, 3).join(', ') : ''));
   await ctx.close();

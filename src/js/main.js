@@ -12,6 +12,7 @@ import { makeVisual, animate, setTeamLook, kick } from './anim.js';
 import { newBot, botThink } from './bots.js';
 import { buildMine, startSpores, updateSpores, clearSpores } from './mode.js';
 import { freeBolt, clearShotFx, updateShotFx, shotFxSamples } from './shotfx.js';
+import { BALL, startFootball, updateFootball, clearFootball, footballSamples } from './football.js';
 import { ROYALE, startRoyale, updateRoyale, clearRoyale, royaleSamples } from './royale.js';
 import { playerInput, updateCamera, updateGuide, CAM, releaseLock, lockHint, resetTouch } from './player.js';
 import { makeTag, updateTags, updateHud, feed, announce, tickAnnounce, renderHeroes, showEnd } from './hud.js';
@@ -19,7 +20,7 @@ import { updateFx, clearFx, explosion, hitSpark, sporeBurst } from './fx.js';
 import { preloadSfx, unlockAudio, sfx, AU, setSfx, setMusic } from './audio.js';
 import { yaInit, yaLoaded, yaTick, yaInterstitial, YA, onYandex } from './yandex.js';
 
-const MENU = { hero:HEROES[store.get('hero', 'shroom')] ? store.get('hero', 'shroom') : 'shroom', diff:store.get('diff', 'normal'), mode:store.get('mode', 'spores') === 'br' ? 'br' : 'spores' };
+const MENU = { hero:HEROES[store.get('hero', 'shroom')] ? store.get('hero', 'shroom') : 'shroom', diff:store.get('diff', 'normal'), mode:['br', 'ball'].includes(store.get('mode', 'spores')) ? store.get('mode', 'spores') : 'spores' };
 const placeText = n => L.lang === 'en' ? `#${n} place` : `#${n} место`;
 const NAMES = ['Груздь', 'Опёнок', 'Сморчок', 'Рыжик', 'Маслёнок', 'Волнушка', 'Строчок', 'Белянка', 'Ежовик', 'Дубовик', 'Вешенка', 'Короед', 'Шершень', 'Жужелица', 'Щелкун', 'Светлячок', 'Медведка', 'Долгоносик'];
 
@@ -36,7 +37,7 @@ applyQuality();
 addEventListener('resize', resize);
 // warm up: put one of every effect in the scene and compile all shaders now, not during the first fight
 {
-  const samples = effectSamples().concat(royaleSamples(), shotFxSamples(HERO_IDS.flatMap(h => [HEROES[h].attack.color, HEROES[h].super.color]))); samples.forEach(m => scene.add(m));
+  const samples = effectSamples().concat(royaleSamples(), footballSamples(), shotFxSamples(HERO_IDS.flatMap(h => [HEROES[h].attack.color, HEROES[h].super.color]))); samples.forEach(m => scene.add(m));
   explosion(0, 0, 1.7); hitSpark(0, 1, 0, '#fff'); sporeBurst(0, 1, 0, '#fff', 4);
   for(const H of HERO_IDS){ const V = makeVisual(H); scene.add(V.root); samples.push(V.root); }
   try{ renderer.compile(scene, camera); }catch(e){}
@@ -89,7 +90,7 @@ function showMenu(){
   renderMenu(); setPreview(MENU.hero);
 }
 function cleanup(){
-  removeFighters(); clearSpores(); clearRoyale(); clearFx();
+  removeFighters(); clearSpores(); clearRoyale(); clearFootball(); clearFx();
   for(const s of G.shots) freeBolt(s.m); G.shots.length = 0; clearShotFx();
   for(const l of G.lobs){ scene.remove(l.m); scene.remove(l.mark); } G.lobs.length = 0;
   for(const p of G.puddles) scene.remove(p.m); G.puddles.length = 0;
@@ -101,7 +102,7 @@ function cleanup(){
 let countT = 0, endT = 0, lastCount = 0;
 // each mode has its own map; switching costs one rebuild, replaying the same mode only resets the crates
 function useArena(id){
-  if(A.map.id !== id){ buildArena(id); buildMine(); }
+  if(A.map.id !== id){ buildArena(id); buildMine(id === 'glade'); }
   else resetCrates();
 }
 function startMatch(opts = {}){
@@ -110,8 +111,9 @@ function startMatch(opts = {}){
   const mode = G.mode = opts.mode || MENU.mode;
   document.body.classList.toggle('br', mode === 'br');
   if(mode === 'br') return startRoyaleMatch(opts);
-  useArena('glade');
-  startSpores();
+  const ball = mode === 'ball';
+  useArena(ball ? 'pitch' : 'glade');
+  if(ball) startFootball(); else startSpores();
   const names = shuffle([...NAMES]);
   const myHero = opts.hero || MENU.hero;
   // allies take the heroes you didn't pick; enemies get a random line-up
@@ -126,7 +128,8 @@ function startMatch(opts = {}){
     if(isMe) G.me = f; else f.bot = newBot(opts.diff || MENU.diff);
   }
   for(const f of G.fighters){ makeTag(f); spawn(f); }
-  beginMatch('Споры', 'Собери 10 спор и удержи их 15 секунд');
+  if(ball) beginMatch('Дождевикбол', 'Закати гриб-дождевик в ворота соперника: 2 гола — победа');
+  else beginMatch('Споры', 'Собери 10 спор и удержи их 15 секунд');
 }
 // «Последний гриб»: ten fighters, each on their own team, spread over the corners of the maze
 function startRoyaleMatch(opts){
@@ -152,7 +155,8 @@ function beginMatch(title, sub){
   $('touch').hidden = !TOUCH; $('superpc').hidden = TOUCH; $('ammopc').hidden = TOUCH; document.body.classList.toggle('touch-on', TOUCH);
   $('lockhint').hidden = TOUCH;
   const br = G.mode === 'br';
-  $('ico0').className = br ? 'shroom-ico' : 'gem-ico'; $('ico1').className = br ? 'gem-ico gold' : 'gem-ico';
+  const ball = G.mode === 'ball';
+  $('ico0').className = br ? 'shroom-ico' : ball ? 'ball-ico' : 'gem-ico'; $('ico1').className = br ? 'gem-ico gold' : ball ? 'ball-ico' : 'gem-ico';
   announce(title, sub, 'sun', 2.4);
 }
 function countdown(dt){
@@ -226,6 +230,21 @@ on('countdownStart', team => { const ours = team === G.me.team; announce(ours ? 
 on('countdownStop', () => { if(G.state === 'play') announce('Отсчёт сброшен', '', 'sun', 1.2); });
 on('countdownTick', n => { if(n <= 5) sfx('countdown', null, 0.8); });
 on('matchOver', team => endMatch(team));
+// «Дождевикбол» events
+on('goal', (team, scorer) => {
+  const ours = team === G.me.team;
+  announce(ours ? 'Гол!' : 'Гол соперника', scorer ? scorer.name : '', ours ? 'sun' : 'foe', 2);
+  sfx(ours ? 'win' : 'lose', null, 0.6); G.shake = Math.max(G.shake, 0.4);
+  if(scorer) feed(nameOf(scorer) + ' ⚽', scorer === G.me ? 'm' : ours ? 'a' : 'f');
+});
+on('kickoff', () => {
+  // everyone back to their spawn, a short countdown, play on
+  for(const f of G.fighters){ f.burst = null; spawn(f); }
+  if(G.me){ CAM.yaw = G.me.aim; CAM.x = G.me.x; CAM.z = G.me.z; }
+  G.state = 'countdown'; countT = 2.2; lastCount = 3;
+});
+on('golden', () => announce('Золотой гол!', 'Кто забьёт — тот победил', 'sun', 2.2));
+on('ballTaken', f => { if(f === G.me) announce('Мяч у тебя', 'Атака — удар или пас, супер — пушечный удар', 'ally', 1.4); });
 // «Последний гриб» events
 on('fogHurt', (f, amt) => damage(f, amt, null, false, true));
 on('fogStart', () => { if(G.state === 'play'){ announce('Туман сгущается!', 'Держись ближе к центру', 'ally', 2); sfx('gem_drop'); } });
@@ -275,7 +294,7 @@ function tick(dt){
     for(const f of G.fighters) if(f.bot && G.state === 'play') botThink(f, dt);
     for(const f of G.fighters) stepFighter(f, dt);
     updateShots(dt); updateLobs(dt); updatePuddles(dt); updateBeams(dt); updateShotFx(dt);
-    updateSpores(dt, G.time); updateRoyale(dt, G.time);
+    updateSpores(dt, G.time); updateRoyale(dt, G.time); updateFootball(dt, G.time);
     if(G.state === 'end'){ endT += dt; if(endT > 2.6 && $('end').hidden){ showEnd(G.result); $('hud').hidden = true; } }
   }
   updateFighterVisuals(dt, G.time);

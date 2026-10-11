@@ -108,7 +108,7 @@ export function stepFighter(f, dt){
   // movement with a short acceleration ramp
   const frozen = G.state !== 'play' || f.stunT > 0 || f.pendingBeam;
   let mx = frozen ? 0 : inp.mx, mz = frozen ? 0 : inp.mz; const ml = Math.hypot(mx, mz); if(ml > 1){ mx /= ml; mz /= ml; }
-  const sp = H.speed * (f.gems > 0 ? 1 : 1);
+  const sp = H.speed * (G.ball && G.ball.holder === f ? 0.9 : 1);   // the ball carrier is a touch slower, so defenders can catch up
   const a = 1 - Math.exp(-dt * 18);
   f.vx += (mx * sp - f.vx) * a; f.vz += (mz * sp - f.vz) * a;
   const kd = Math.exp(-dt * 7); f.kx *= kd; f.kz *= kd;
@@ -149,6 +149,8 @@ export function muzzlePos(f, out){
 const MZ = new THREE.Vector3();
 
 function doAttack(f, tx, tz){
+  // a mode can take the button over (in «Дождевикбол» the ball carrier kicks instead of shooting)
+  if(G.attackHook && f.alive && f.cdT <= 0 && G.state === 'play' && G.attackHook(f, tx, tz, false)) return;
   if(!canAttack(f)) { if(f.isMe && f.ammo < 1 && f.cdT <= 0) emit('empty', f); return; }
   const H = f.H, W = H.attack;
   f.ammo -= 1; f.cdT = W.cd * (f.frenzyT > 0 ? 0.6 : 1); f.atkT = 0; f.regenT = 0; f.revealT = Math.max(f.revealT, 1.0);
@@ -160,6 +162,7 @@ function doAttack(f, tx, tz){
 }
 function doSuper(f, tx, tz){
   if(!f.alive || f.pendingBeam || G.state !== 'play') return;
+  if(G.attackHook && G.attackHook(f, tx, tz, true)) return;
   const H = f.H, S = H.super;
   f.charge = 0; f.supT = 0; f.atkT = 0; f.regenT = 0; f.revealT = Math.max(f.revealT, 1.2);
   const aim = Math.atan2(tx - f.x, tz - f.z);
