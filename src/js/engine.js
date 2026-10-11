@@ -122,7 +122,7 @@ export function resize(){
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
-  camera.fov = camera.aspect < 0.75 ? 72 : camera.aspect < 1.2 ? 62 : 55;
+  camera.fov = camera.userData.baseFov = camera.aspect < 0.75 ? 72 : camera.aspect < 1.2 ? 62 : 55;
   camera.updateProjectionMatrix();
   if(Q.composer){ Q.composer.setPixelRatio(Q.PR); Q.composer.setSize(w, h); }
 }

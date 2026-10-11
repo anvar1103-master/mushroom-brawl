@@ -83,8 +83,9 @@ renderSettings();
 let fpsShown = -1;
 function showFps(){ if(!SET.fps || Q.fps === fpsShown) return; fpsShown = Q.fps; const el = $('fps'); el.textContent = Q.fps + ' FPS'; el.className = 'fps' + (Q.fps < 30 ? ' bad' : Q.fps < 50 ? ' mid' : ''); }
 $('play').onclick = () => { unlockAudio(); sfx('confirm'); startMatch(); };
+function unzoom(){ CAM.zoom = 0; camera.fov = camera.userData.baseFov || 55; camera.updateProjectionMatrix(); }
 function showMenu(){
-  G.state = 'menu'; G.paused = false;
+  G.state = 'menu'; G.paused = false; unzoom();
   cleanup();
   $('menu').hidden = false; $('hud').hidden = true; $('end').hidden = true; $('pause').hidden = true;
   renderMenu(); setPreview(MENU.hero);
@@ -149,7 +150,11 @@ function startRoyaleMatch(opts){
 }
 function beginMatch(title, sub){
   const me = G.me;
-  CAM.yaw = me.aim; CAM.x = me.x; CAM.z = me.z; CAM.pitch = -0.08;
+  CAM.yaw = me.aim; CAM.x = me.x; CAM.z = me.z; CAM.pitch = -0.08; unzoom(); resetTouch();
+  // the sniper gets a scope: the right mouse button on a computer (the super moves to E), a button on a phone
+  const scope = !!me.H.attack.scope;
+  $('b-scope').hidden = !(TOUCH && scope);
+  $('sp-keys').textContent = tr(scope ? 'E · Пробел' : 'ПКМ · E');
   G.state = 'countdown'; countT = 3.2; lastCount = 4; endT = 0;
   $('menu').hidden = true; $('end').hidden = true; $('hud').hidden = false;
   $('touch').hidden = !TOUCH; $('superpc').hidden = TOUCH; $('ammopc').hidden = TOUCH; document.body.classList.toggle('touch-on', TOUCH);

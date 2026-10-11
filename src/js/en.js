@@ -16,6 +16,7 @@ export const EN = {
   'Споровый дробовик бьёт веером: вблизи разносит любого.':'A spore shotgun that fires in a fan: up close it flattens anyone.',
   'Кидает бомбы навесом через стены. Взрыв оставляет горящую лужу.':'Lobs bombs over walls. Each blast leaves a burning puddle.',
   'Дальнобойное жало: чем дальше цель, тем больнее.':'A long-range stinger: the further the target, the harder it hits.',
+  'Дальнобойное жало: чем дальше цель, тем больнее. Прицел приближает, а выстрел из прицела заряжается до +60% урона.':'A long-range stinger: the further the target, the harder it hits. The scope zooms in, and a scoped shot charges up to +60% damage.',
   'Споровый веер':'Spore Fan', 'Грибной залп':'Mushroom Volley', 'широкий залп отбрасывает врагов':'a wide volley that knocks enemies back',
   'Жучиная бомба':'Beetle Bomb', 'Ковровая бомбёжка':'Carpet Bombing', 'пять бомб ложатся дорожкой':'five bombs land in a line',
   'Жало':'Stinger', 'Пронзающий луч':'Piercing Beam', 'луч прошивает стены и всех на пути':'a beam that goes through walls and everyone in its way',
@@ -32,6 +33,8 @@ export const EN = {
   'Закати гриб-дождевик в ворота соперника: 2 гола — победа':'Roll the puffball into the other goal: 2 goals win',
   'Гол!':'Goal!', 'Гол соперника':'They scored', 'Золотой гол!':'Golden goal!', 'Кто забьёт — тот победил':'Next goal wins', 'Золотой гол':'Golden goal',
   'Мяч у тебя':'You have the ball', 'Атака — удар или пас, супер — пушечный удар':'Attack kicks or passes, the super is a cannon shot', 'Счёт':'Score', 'Лесное поле':'Forest Pitch',
+  'E · Пробел':'E · Space', 'Прицел':'Scope', 'Заряжено!':'Charged!',
+  'ПКМ — прицел: приближение, выстрел заряжается до +60% урона':'RMB — scope: zoom in, the shot charges up to +60% damage',
   // battle
   'Супер':'Super', 'ПКМ · E':'RMB · E', 'Возрождение через':'Respawn in', 'Щёлкни по полю, чтобы управлять мышью':'Click the field to aim with the mouse',
   'Собери 10 спор и удержи их 15 секунд':'Collect 10 spores and hold them for 15 seconds', 'Ты':'You',

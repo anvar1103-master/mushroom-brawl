@@ -11,7 +11,9 @@ import { segHit, A, tileAtXZ, tileHeight } from './arena.js';
 import { unlockAudio } from './audio.js';
 import { goalOf } from './football.js';
 
-export const CAM = { yaw:Math.PI, pitch:-0.08, x:0, z:0, dist:3.5, pivotH:1.6, shoulder:0.6, sens:store.get('sens', 1), turnTo:null };
+export const CAM = { yaw:Math.PI, pitch:-0.08, x:0, z:0, dist:3.5, pivotH:1.6, shoulder:0.6, sens:store.get('sens', 1), turnTo:null, zoom:0 };
+// the sniper's scope: the right mouse button (or Shift) on a computer, the scope button on a phone
+const hasScope = () => !!(G.me && G.me.H.attack.scope);
 const PITCH_MIN = -0.6, PITCH_MAX = 0.38;
 const keys = {}, mouse = { l:false, r:false, x:0, y:0 };
 export let locked = false;
@@ -19,6 +21,7 @@ export const T = { move:null, atk:null, sup:null, cam:null };   // active touche
 export const AIM = { x:0, y:0, z:0, foe:null, inRange:false, gx:0, gz:0, groundHit:false };
 
 function look(dx, dy, k){
+  k *= 1 - CAM.zoom * 0.6;   // finer aim through the scope
   CAM.yaw -= dx * k * CAM.sens;
   CAM.pitch = clamp(CAM.pitch - dy * k * CAM.sens, PITCH_MIN, PITCH_MAX);
   CAM.turnTo = null;
@@ -37,7 +40,7 @@ canvas.addEventListener('mousedown', e => {
   if(TOUCH) return;
   if(inMatch() && !locked && canvas.requestPointerLock){ try{ const p = canvas.requestPointerLock(); if(p && p.catch) p.catch(() => {}); }catch(err){} }
   if(e.button === 0) mouse.l = true;
-  if(e.button === 2 && G.me) G.me.wantSup = true;
+  if(e.button === 2 && G.me){ if(hasScope()) mouse.r = true; else G.me.wantSup = true; }
 });
 addEventListener('mouseup', e => { if(e.button === 0) mouse.l = false; if(e.button === 2) mouse.r = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -65,6 +68,7 @@ function onTouchStart(e){
     const tgt = t.target.closest && t.target.closest('[data-btn]');
     if(tgt){
       const kind = tgt.dataset.btn;
+      if(kind === 'scope'){ T.scopeOn = !T.scopeOn; tgt.classList.toggle('on', T.scopeOn); continue; }
       if((kind === 'atk' && !T.atk) || (kind === 'sup' && !T.sup && G.me && G.me.charge >= 1)){
         T[kind] = { id:t.identifier, x:t.clientX, y:t.clientY, moved:0, t0:performance.now(), el:tgt };
         tgt.classList.add('on');
@@ -80,6 +84,7 @@ function onTouchStart(e){
 export function resetTouch(){
   for(const k of ['atk', 'sup']) if(T[k]){ T[k].el.classList.remove('on'); T[k] = null; }
   T.move = T.cam = null; $('stick').hidden = true; $('knob').style.transform = '';
+  T.scopeOn = false; $('b-scope').classList.remove('on'); mouse.r = false;
 }
 const TOUCH_K = 0.0055;
 function onTouchMove(e){
@@ -220,6 +225,7 @@ export function playerInput(dt){
   inp.locked = false;
   inp.aim = Math.atan2(inp.tx - me.x, inp.tz - me.z);
   me.aiming = true;
+  me.scope = hasScope() && (mouse.r || keys.ShiftLeft || keys.ShiftRight || !!T.scopeOn);
   if(!TOUCH){
     if(mouse.l && canAttack(me)){ const p = aimFor(me, false); inp.tx = p.x; inp.tz = p.z; inp.fire = true; }
     if(me.wantSup){ me.wantSup = false; if(me.charge >= 1){ const p = aimFor(me, true); inp.tx = p.x; inp.tz = p.z; inp.sup = true; } }
@@ -239,7 +245,11 @@ export function updateCamera(dt){
   const px = CAM.x + rx * CAM.shoulder * 0.4, pz = CAM.z + rz * CAM.shoulder * 0.4, py = CAM.pivotH;
   // wanted spot: behind and a little to the right. Hedges in the way turn see-through (arena.js), so the camera
   // keeps its distance; it only pulls in to stay inside the fence
-  let dist = CAM.dist;
+  // the scope pulls the camera in over the shoulder and narrows the view
+  CAM.zoom += ((me.scope && me.alive ? 1 : 0) - CAM.zoom) * Math.min(1, dt * 12);
+  const base = camera.userData.baseFov || 55, fov = base * (1 - CAM.zoom * 0.55);
+  if(Math.abs(camera.fov - fov) > 0.01){ camera.fov = fov; camera.updateProjectionMatrix(); }
+  let dist = CAM.dist * (1 - CAM.zoom * 0.55);
   const wx = px - camFwd.x * dist + rx * CAM.shoulder, wz = pz - camFwd.z * dist + rz * CAM.shoulder;
   const hit = segHit(px, pz, wx, wz, outside);
   let cx = wx, cz = wz, cyy = py - camFwd.y * dist + 0.25;

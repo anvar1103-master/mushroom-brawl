@@ -307,6 +307,10 @@ function fightMoveAndShoot(f, B, T, mx, mz, dt){
   const moved = Math.hypot(f.x - B.lx, f.z - B.lz); B.lx = f.x; B.lz = f.z;
   if(Math.hypot(mx, mz) > 0.3 && moved < 0.01) B.stuck += dt; else B.stuck = Math.max(0, B.stuck - dt);
   if(B.stuck > 0.6){ B.path = null; mx += rand(-1, 1); mz += rand(-1, 1); if(B.stuck > 1.2) B.stuck = 0; }
+  // a sniper bot with a clear long shot stops, scopes in and lets the shot charge (unless it is being shot at)
+  const SC = H.attack.scope;
+  f.scope = !!(SC && T && canAttack(f) && dist(f, T) > 7 && dist(f, T) < H.attack.range * SC.range * 0.95 && losClear(f.x, f.z, T.x, T.z) && now - (f.hurtAt || -9) > 1 && !(G.ball && G.ball.holder === f));
+  if(f.scope){ mx *= 0.2; mz *= 0.2; }
   const ml = Math.hypot(mx, mz); if(ml > 1){ mx /= ml; mz /= ml; }
   inp.mx = mx; inp.mz = mz;
   // ---- aim and shoot ----
@@ -330,11 +334,12 @@ function fightMoveAndShoot(f, B, T, mx, mz, dt){
       if((Sp.kind === 'fan' && d < Sp.range * 0.75 && los) || (Sp.kind === 'barrage' && d < Sp.range) || (Sp.kind === 'beam' && d < Sp.range * 0.9) || (Sp.kind === 'bounce' && d < 11) || (Sp.kind === 'frenzy' && d < W.range && los)) inp.sup = true;
     }
     if(!inp.sup && ready && canAttack(f)){
-      const inRange = d < W.range * (W.kind === 'fan' ? 0.85 : W.kind === 'lob' ? 1.0 : 0.95);
+      const inRange = d < W.range * (W.kind === 'fan' ? 0.85 : W.kind === 'lob' ? 1.0 : 0.95) * (f.scope ? W.scope.range : 1);
+      const charging = f.scope && f.scopeT < W.scope.time * (B.S.react > 0.3 ? 0.7 : 0.95);   // still charging a scoped shot
       // keep one charge in reserve unless the target is close or weak
       // (a gunner in a frenzy just keeps firing; outside it, bursts wait until the spread has closed a little)
       const spare = f.frenzyT > 0 || ((f.ammo >= 2 || d < W.range * 0.6 || T.hp < T.max * 0.4) && !(W.kind === 'burst' && (f.bloom || 0) > 0.6 && d > W.range * 0.5));
-      if(inRange && (los || W.kind === 'lob') && spare) inp.fire = true;
+      if(inRange && (los || W.kind === 'lob') && spare && !charging) inp.fire = true;
       // the slingshot banks a pebble off a hedge when the enemy hides behind a corner (looked up a few times a second)
       else if(W.kind === 'bounce' && !los && d < W.range * 0.8 && spare && now > (B.bankT || 0)){
         B.bankT = now + 0.3;

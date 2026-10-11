@@ -83,6 +83,16 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .xhair i:nth-child(1){left:-1px;top:-17px;width:2px;height:9px}.xhair i:nth-child(2){left:-1px;top:8px;width:2px;height:9px}
 .xhair i:nth-child(3){top:-1px;left:-17px;height:2px;width:9px}.xhair i:nth-child(4){top:-1px;left:8px;height:2px;width:9px}
 .xhair b{position:absolute;left:-2px;top:-2px;width:4px;height:4px;border-radius:50%;background:var(--c);box-shadow:0 0 0 1px rgba(0,0,0,.55)}
+/* the sniper scope: a dark vignette with a round sight, cross hairs and a charge ring that fills up */
+.scope{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 50%,rgba(0,0,0,0) 0,rgba(0,0,0,0) min(30vh,30vw),rgba(8,14,8,.82) calc(min(30vh,30vw) + 2px));--k:0}
+.scope .sc-ring{position:absolute;left:50%;top:50%;width:min(60vh,60vw);height:min(60vh,60vw);transform:translate(-50%,-50%);border-radius:50%;box-shadow:0 0 0 3px rgba(20,20,20,.85),inset 0 0 30px rgba(0,0,0,.35)}
+.scope .sc-h,.scope .sc-v{position:absolute;left:50%;top:50%;background:rgba(20,20,20,.75)}
+.scope .sc-h{width:min(60vh,60vw);height:1.5px;transform:translate(-50%,-50%)} .scope .sc-v{height:min(60vh,60vw);width:1.5px;transform:translate(-50%,-50%)}
+.scope b{position:absolute;left:50%;top:50%;width:56px;height:56px;transform:translate(-50%,-50%);border-radius:50%;background:conic-gradient(#FFD23F calc(var(--k) * 360deg),rgba(255,255,255,.18) 0);-webkit-mask:radial-gradient(circle,transparent 24px,#000 25px);mask:radial-gradient(circle,transparent 24px,#000 25px)}
+.scope.full b{background:#FFE15A;box-shadow:0 0 14px #FFD23F}
+.scope span{position:absolute;left:50%;top:calc(50% + min(30vh,30vw) + 10px);transform:translateX(-50%);font:800 13px/1 var(--font-body);color:#FFE7A0;text-shadow:0 1px 2px #000}
+.tbtn.tscope{position:absolute;right:calc(50px + var(--safe-r));bottom:calc(160px + var(--safe-b));width:62px;height:62px;border-radius:50%;background:rgba(20,30,20,.55);box-shadow:inset 0 0 0 2px rgba(255,255,255,.35);display:grid;place-items:center;pointer-events:auto}
+.tbtn.tscope svg{position:relative;inset:auto;width:34px;height:34px} .tbtn.tscope.on{background:rgba(255,210,63,.55);box-shadow:inset 0 0 0 3px #FFD23F}
 /* hit marker: four short diagonal ticks around the crosshair */
 .hitm{position:absolute;left:50%;top:50%;width:0;height:0;opacity:0;pointer-events:none;--c:#fff}
 .hitm i{position:absolute;left:-1.5px;top:-11px;width:3px;height:7px;border-radius:2px;background:var(--c);box-shadow:0 0 0 1px rgba(0,0,0,.5);transform-origin:1.5px 11px}
