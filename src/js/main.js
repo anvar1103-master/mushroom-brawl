@@ -11,6 +11,7 @@ import { effectSamples, makeFighter, removeFighters, spawn, stepFighter, updateS
 import { makeVisual, animate, setTeamLook, kick } from './anim.js';
 import { newBot, botThink } from './bots.js';
 import { buildMine, startSpores, updateSpores, clearSpores } from './mode.js';
+import { freeBolt, clearShotFx, updateShotFx, shotFxSamples } from './shotfx.js';
 import { ROYALE, startRoyale, updateRoyale, clearRoyale, royaleSamples } from './royale.js';
 import { playerInput, updateCamera, updateGuide, CAM, releaseLock, lockHint, resetTouch } from './player.js';
 import { makeTag, updateTags, updateHud, feed, announce, tickAnnounce, renderHeroes, showEnd } from './hud.js';
@@ -35,7 +36,7 @@ applyQuality();
 addEventListener('resize', resize);
 // warm up: put one of every effect in the scene and compile all shaders now, not during the first fight
 {
-  const samples = effectSamples().concat(royaleSamples()); samples.forEach(m => scene.add(m));
+  const samples = effectSamples().concat(royaleSamples(), shotFxSamples(HERO_IDS.flatMap(h => [HEROES[h].attack.color, HEROES[h].super.color]))); samples.forEach(m => scene.add(m));
   explosion(0, 0, 1.7); hitSpark(0, 1, 0, '#fff'); sporeBurst(0, 1, 0, '#fff', 4);
   for(const H of HERO_IDS){ const V = makeVisual(H); scene.add(V.root); samples.push(V.root); }
   try{ renderer.compile(scene, camera); }catch(e){}
@@ -89,7 +90,7 @@ function showMenu(){
 }
 function cleanup(){
   removeFighters(); clearSpores(); clearRoyale(); clearFx();
-  for(const s of G.shots) scene.remove(s.m); G.shots.length = 0;
+  for(const s of G.shots) freeBolt(s.m); G.shots.length = 0; clearShotFx();
   for(const l of G.lobs){ scene.remove(l.m); scene.remove(l.mark); } G.lobs.length = 0;
   for(const p of G.puddles) scene.remove(p.m); G.puddles.length = 0;
   for(const b of G.beams){ scene.remove(b.core); scene.remove(b.outer); } G.beams.length = 0;
@@ -239,6 +240,12 @@ function announceLeft(){
   else if(n === 3) announce('Ты в топ-3!', 'Пусть другие дерутся первыми', 'sun', 1.6);
   else announce('Финал!', 'Один на один', 'foe', 1.6);
 }
+// hit marker on the crosshair: a quick white X, red and bigger on a knockout
+let hitT = null;
+on('hitMarker', kill => {
+  const x = $('hitm'); x.classList.remove('hit', 'killhit'); void x.offsetWidth; x.classList.add(kill ? 'killhit' : 'hit');
+  clearTimeout(hitT); hitT = setTimeout(() => x.classList.remove('hit', 'killhit'), kill ? 380 : 180);
+});
 on('superReady', f => { if(f === G.me) sfx('super_ready'); });
 on('empty', f => { if(f === G.me) sfx('empty'); });
 on('damage', (o, amt, src) => { if(o === G.me) sfx('hurt', null, 0.7); else if(src === G.me) sfx('hit', null, 0.6); });
@@ -267,7 +274,7 @@ function tick(dt){
     if((G.state === 'play' || G.state === 'countdown') && G.me && G.me.alive && !G.me.bot && !G.noInput) playerInput(dt);
     for(const f of G.fighters) if(f.bot && G.state === 'play') botThink(f, dt);
     for(const f of G.fighters) stepFighter(f, dt);
-    updateShots(dt); updateLobs(dt); updatePuddles(dt); updateBeams(dt);
+    updateShots(dt); updateLobs(dt); updatePuddles(dt); updateBeams(dt); updateShotFx(dt);
     updateSpores(dt, G.time); updateRoyale(dt, G.time);
     if(G.state === 'end'){ endT += dt; if(endT > 2.6 && $('end').hidden){ showEnd(G.result); $('hud').hidden = true; } }
   }

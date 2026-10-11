@@ -127,7 +127,7 @@ export function animate(V, f, dt, t){
   const swing = Math.sin(V.ph) * 0.5 * mv * (aimHold ? 0.3 : 1);
   B.armL.rotation.set(R(B.armL).x + swing, 0, 0);
   B.armR.rotation.set(-swing * 0.3, 0, 0);
-  B.gun.position.copy(R(B.gun));
+  B.gun.position.copy(R(B.gun)); B.gun.position.z -= Math.max(0, S.kick.x) * 0.08;   // the weapon jumps back on every shot
   B.gun.rotation.x = 0;
   B.gun.scale.setScalar(1);
   // ---------------- attack layers ----------------
