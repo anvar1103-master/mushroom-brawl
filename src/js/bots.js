@@ -3,10 +3,11 @@ import { G } from './state.js';
 import { A, findPath, losClear, walkClear, inGrass, tileAtXZ, sightClear, segHit, colOf, rowOf } from './arena.js';
 import { fogR, fogAhead, ROYALE } from './royale.js';
 import { canSee, canAttack } from './combat.js';
+import { bankShot } from './player.js';
 import { rand, clamp, angDiff, TAU } from './util.js';
 
 export const SKILL = { easy:{ err:0.22, react:0.6, lead:0.4, dodge:0.2 }, normal:{ err:0.11, react:0.35, lead:0.75, dodge:0.5 }, hard:{ err:0.05, react:0.18, lead:1, dodge:0.85 } };
-const PREF = { shroom:0.5, beetle:0.72, wasp:0.82 };
+const PREF = { shroom:0.5, beetle:0.72, wasp:0.82, roly:0.62 };
 
 export function newBot(skill = 'normal'){
   return { S:SKILL[skill], temper:rand() < 0.55 ? 'careful' : 'bold', path:null, pathT:0, gx:null, gz:null, mode:'idle', target:null, seenT:0, mem:new Map(), strafe:rand() < 0.5 ? -1 : 1, strafeT:rand(0.6, 1.6), thinkT:0, holdX:0, holdZ:0, stuck:0, lx:0, lz:0 };
@@ -271,13 +272,19 @@ function fightMoveAndShoot(f, B, T, mx, mz, dt){
     const ready = B.seenT > B.S.react && (!B.holdFire || hurt || (!B.quiet && d < W.range * 0.55));
     // supers: shotgun up close, bombs on anyone in reach, beam lined up from far
     if(ready && f.charge >= 1){
-      if((Sp.kind === 'fan' && d < Sp.range * 0.75 && los) || (Sp.kind === 'barrage' && d < Sp.range) || (Sp.kind === 'beam' && d < Sp.range * 0.9)) inp.sup = true;
+      if((Sp.kind === 'fan' && d < Sp.range * 0.75 && los) || (Sp.kind === 'barrage' && d < Sp.range) || (Sp.kind === 'beam' && d < Sp.range * 0.9) || (Sp.kind === 'bounce' && d < 11)) inp.sup = true;
     }
     if(!inp.sup && ready && canAttack(f)){
       const inRange = d < W.range * (W.kind === 'fan' ? 0.85 : W.kind === 'lob' ? 1.0 : 0.95);
       // keep one charge in reserve unless the target is close or weak
       const spare = f.ammo >= 2 || d < W.range * 0.6 || T.hp < T.max * 0.4;
       if(inRange && (los || W.kind === 'lob') && spare) inp.fire = true;
+      // the slingshot banks a pebble off a hedge when the enemy hides behind a corner (looked up a few times a second)
+      else if(W.kind === 'bounce' && !los && d < W.range * 0.8 && spare && now > (B.bankT || 0)){
+        B.bankT = now + 0.3;
+        const b = bankShot(f, T, W);
+        if(b !== null){ inp.aim = b; inp.tx = f.x + Math.sin(b) * 6; inp.tz = f.z + Math.cos(b) * 6; inp.fire = true; }
+      }
     }
   } else if(B.shootAt){
     // break the crate in front of us (no reason to keep a charge in reserve here)

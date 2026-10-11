@@ -137,6 +137,7 @@ export function renderHeroes(sel, onPick){
 function attackText(W){
   if(W.kind === 'fan') return W.count + ' спор веером';
   if(W.kind === 'lob') return 'бомба через стены, горящая лужа';
+  if(W.kind === 'bounce') return 'отскакивает от кустов ' + W.bounces + ' раза, достаёт за углом';
   return 'дальний выстрел, урон растёт с расстоянием';
 }
 
